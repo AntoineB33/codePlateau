@@ -34,9 +34,11 @@ Tableau_Final <- data.frame(Duree_Totale = numeric(),
 
 # Parcours des fichiers un à un 
 for (fichier in fichiers) {
+  print(40)
   
   # Lecture du jeu de données brutes
   df <- read.xlsx(fichier)
+  print(41)
   
   
   # Définition du poids minimal de l'assiette 
