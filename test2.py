@@ -1,5 +1,3 @@
-dossier = r"C:\Users\comma\Documents\travail\Polytech\stage s8\gihtub\codePlateau\donneexslx\donneexslx"
-dossier_graphique = r"C:\Users\comma\Documents\travail\Polytech\stage s8\gihtub\codePlateau\donneexslx\donneexslx\diagramme"
 """"/////////////////////////Import/////////////////////////"""
 import os
 import pandas as pd
@@ -8,6 +6,8 @@ from scipy.signal import butter, filtfilt
 import plotly.graph_objects as go
 from tkinter import filedialog, Tk
 import math
+dossier = r"C:\Users\comma\Documents\travail\Polytech\stage s8\gihtub\codePlateau\donneexslx\donneexslx"
+dossier_graphique = r"C:\Users\comma\Documents\travail\Polytech\stage s8\gihtub\codePlateau\donneexslx\donneexslx\diagramme"
 """/////////////////////////////////////////////////////////"""
 
 
@@ -90,8 +90,6 @@ for fichier in fichiers:
     print(f"Le poids consommé pendant le repas est : {poids_consome}")
 
     #Calcul de la durée du repas 
-    indice_debut = 0
-    indice_fin = len(df) - 1
     for i in range(len(df) - 1):
         if df["Ptot"].iloc[i] > 700 and (df["Ptot"].iloc[i] + 4) < df["Ptot"].shift(-1).iloc[i]:
             debut_time = df["time"].iloc[i + 1]
@@ -132,9 +130,9 @@ for fichier in fichiers:
             elif x > y:
                 inALoop = False
                 del pics[len(pics) - 1]
-    print(f"Le temps d'activité est de : {activity_time} sec")
+    print(f"activity_time est : {activity_time}")
     ratio = activity_time / temps_repas
-    print(f"Le ratio d'activité est : {ratio * 100} %")
+    print(f"Le ratio d'activité est : {ratio}")
 
     print(f"Le nombre de bouchée pendant le repas est : {bouche}")
 
@@ -149,17 +147,18 @@ for fichier in fichiers:
     fig.add_trace(
         go.Scatter(y=df["Ptot"], x=df["time"], mode="lines", name="Poids Total")
     )
+
     
     # Add vertical lines
     for x in pics:
         fig.add_vline(
             x=x[0],
-            line=dict(color="red", width=2), annotation_text=f"{x[1]}", annotation_position="middle"
+            line=dict(color="red", width=2), annotation_text=f"{x[1]}", annotation_position="top"
         )
         try:
             fig.add_vline(
                 x=x[2],
-                line=dict(color="red", width=2), annotation_text=f"{x[3]}", annotation_position="middle"
+                line=dict(color="red", width=2), annotation_text=f"{x[3]}", annotation_position="top"
             )
             # Add a shape (rectangle) to fill the area between the vertical lines
             fig.add_shape(
