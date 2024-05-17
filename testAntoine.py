@@ -151,15 +151,16 @@ for fichier in fichiers:
     )
     
     # Add vertical lines
+    max_value = df["Ptot"].max()
     for x in pics:
         fig.add_vline(
             x=x[0],
-            line=dict(color="red", width=2), annotation_text=f"{x[1]}", annotation_position="middle"
+            line=dict(color="red", width=2), annotation_text=f"{x[1]}", annotation_position="top"
         )
         try:
             fig.add_vline(
                 x=x[2],
-                line=dict(color="red", width=2), annotation_text=f"{x[3]}", annotation_position="middle"
+                line=dict(color="red", width=2), annotation_text=f"{x[3]}", annotation_position="top"
             )
             # Add a shape (rectangle) to fill the area between the vertical lines
             fig.add_shape(
@@ -167,7 +168,7 @@ for fichier in fichiers:
                 x0=x[0],
                 x1=x[2],
                 y0=0,  # Adjust y0 and y1 as needed
-                y1=4000,  # Adjust y0 and y1 as needed
+                y1=max_value,  # Adjust y0 and y1 as needed
                 fillcolor="rgba(255, 0, 0, 0.2)",  # Transparent red fill color
                 line=dict(color="rgba(255, 0, 0, 0)")  # No border line
             )
