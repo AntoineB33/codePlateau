@@ -220,19 +220,6 @@ for fichier in fichiers:
         color="#000000"
     ))
 
-    fig.add_annotation(
-    text=f"Nombre de bouchées: {bouche}",
-    xref="paper",  # Utilise les coordonnées relatives à la zone du graphique
-    yref="paper",
-    x=0.98,  # Position sur l'axe des x, 1 étant tout à droite
-    y=0.86,  # Position sur l'axe des y, 1 étant tout en haut
-    showarrow=False,
-    font=dict(
-        family="Calibri, monospace",
-        size=16,
-        color="#000000"
-    ))
-
     fig.write_html(filepath)
     bouche = 0 
 

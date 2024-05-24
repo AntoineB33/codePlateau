@@ -12,13 +12,15 @@ library(openxlsx)
 # install.packages("openxlsx")
 
 
-dossier <- "c:/Users/comma/Documents/travail/Polytech/stage s8/code/data/Donnees_brutes_csv" # Selectionne le dossier où sont stockées les données 
+dossier <- "c:/Users/comma/Documents/travail/Polytech/stage s8/gihtub/codePlateau/data/Donnees_brutes_csv" # Selectionne le dossier où sont stockées les données 
 
-fichiers <- list.files(path = dossier, pattern = "\\.xlsx$", full.names = TRUE)
+dossier <- "c:/Users/comma/Documents/travail/Polytech/stage s8/gihtub/codePlateau/donneexslx/donneexslx"
+
+
+fichiers <- list.files(path = dossier, pattern = "5\\.xlsx$", full.names = TRUE)
 # fichiers <- list.files(path = dossier, full.names = TRUE) # Renvoie un vecteur avec tous les fichiers contenus dans le dossier
 
-dossier_graphique <- setwd("c:/Users/comma/Documents/travail/Polytech/stage s8/code/result") # Chemin d'enregistrement des différents graphiques 
-
+dossier_graphique <- setwd("c:/Users/comma/Documents/travail/Polytech/stage s8/gihtub/codePlateau/result") # Chemin d'enregistrement des différents graphiques 
 
 
 Tableau_Final <- data.frame(Duree_Totale = numeric(),
@@ -34,22 +36,24 @@ Tableau_Final <- data.frame(Duree_Totale = numeric(),
 
 # Parcours des fichiers un à un 
 for (fichier in fichiers) {
-  print(40)
   
   # Lecture du jeu de données brutes
   df <- read.xlsx(fichier)
-  print(41)
   
+  colnames(df) <- c("time", "Ptot")
   
   # Définition du poids minimal de l'assiette 
   plate_weight_min <- 100 # en gramme
-  data <- data.frame(time = df$time, Ptot = df$Ptot)
+  data <- data.frame(time = df[[1]], Ptot = df[[2]])
   data <- data[data$Ptot > plate_weight_min,]
+  data$time <- data$time / 1000
+  
+  if(nrow(data) == 0) next # Si le dataframe est vide après filtrage, passer au fichier suivant
+  
   
   # Définition des conditions d'une bouchée 
   min_bite_duration <- 1  # en secondes
   min_bite_weight <- 4    # en grammes 
-  print(4)
   
   
   
@@ -58,9 +62,13 @@ for (fichier in fichiers) {
   indice <- 0
   indices_time <- c(which(cumsum(c(diff(data$time),0)) >= int_time)[1])
   data_true <- as.data.frame(data)
+
+  if(nrow(data_true) == 0) next # Si le dataframe est vide après ce filtrage, passer au fichier suivant
+  
   n <- seq(nrow(data))
   n_true <- n
   data_true$Index <- seq(nrow(data_true))
+
   
   # Tant que le temps n'est pas supérieur à 0.2s , on supprime la ligne 
   
@@ -124,6 +132,8 @@ for (fichier in fichiers) {
     high <- highcut / nyq
     
     # Filtre passe-bas
+    print(order)
+    print(high)
     b1 <- butter(order, high, type = "low", plane = "z")
     # Filtre passe-haut
     b2 <- butter(order, low, type = "high", plane = "z")
@@ -244,7 +254,6 @@ for (fichier in fichiers) {
     
     return(dernier_indices)
   }
-  
   
   # Filtrage de la série temporelle avec un filtre bandstop
   ts_data_filt <- butter_bandstop_filter(filtered_data$Ptot, 0.5, 1, 1 / mean(diff(filtered_data$time)), 4)
