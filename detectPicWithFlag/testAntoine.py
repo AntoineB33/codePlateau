@@ -1,5 +1,5 @@
 dossier = r"C:\Users\comma\Documents\travail\Polytech\stage s8\gihtub\codePlateau\donneexslx\donneexslx"
-dossier_graphique = r"C:\Users\comma\Documents\travail\Polytech\stage s8\gihtub\codePlateau\donneexslx\donneexslx\diagramme"
+dossier_graphique = r"C:\Users\comma\Documents\travail\Polytech\stage s8\gihtub\codePlateau\detectPicWithFlag\result"
 """"/////////////////////////Import/////////////////////////"""
 import os
 import pandas as pd
@@ -80,33 +80,6 @@ for fichier in fichiers:
     lowcut = 0.5 # Fréquence de coupure basse
     highcut = 1.0
     order = 4
-
-
-    seuil_poids = min_bite_weight
-
-    filtered_data['Index'] = np.arange(len(filtered_data))
-    filtered_data_true = filtered_data.copy()
-    filtered_data_wo_noise = filtered_data.copy()
-    n_true = np.arange(len(filtered_data_true))
-
-    indice = 0
-
-    while not pd.isna(indice):
-        val_ini = float(filtered_data_true.iloc[0]['Ptot'])
-
-        indices = np.where(np.abs(filtered_data_true['Ptot'] - val_ini) >= seuil_poids)[0]
-        if len(indices) > 0:
-            indice = indices[0] - 1
-        else:
-            indice = np.nan
-        
-        if not pd.isna(indice):
-            n_true = n_true[np.where(n_true == indice)[0][0]:]
-            indice_commun = np.where(filtered_data_true.iloc[0]['time'] == filtered_data_wo_noise['time'])[0][0]
-
-            filtered_data_wo_noise.loc[indice_commun:indice, 'Ptot'] = val_ini
-            n_true = n_true[1:]  
-            filtered_data_true = filtered_data_true[filtered_data_true['Index'] == n_true[0]:]
 
     # # Fonction de filtrage band-stop
     # def butter_bandstop(lowcut, highcut, fs, order=4):
