@@ -18,6 +18,7 @@ debut_time = None
 fin_time = None
 indice_debut = 0
 indice_fin = 0
+min_bite_weight = 4
 """/////////////////////////////////////////////////////////"""
 
 root = Tk()
@@ -47,6 +48,19 @@ Tableau_Final = pd.DataFrame(
     ]
 )
 
+
+# Fonction de filtrage passe-bas
+def butter_lowpass(cutoff, fs, order=4):
+    nyq = 0.5 * fs
+    normal_cutoff = cutoff / nyq
+    b, a = butter(order, normal_cutoff, btype='low', analog=False)
+    return b, a
+
+def lowpass_filter(data, cutoff, fs, order=4):
+    b, a = butter_lowpass(cutoff, fs, order=order)
+    y = filtfilt(b, a, data)
+    return y
+
 # Traitement des fichiers
 
 for fichier in fichiers:
@@ -58,11 +72,41 @@ for fichier in fichiers:
     df = df[df["Ptot"] < 3000] # Filtre sur le poids maximal de l'assiette
     df["time"] = df["time"] / 1000 # Conversion en secondes
     
-    # Création des trames temporelles filtrées e
-    fs = 1.0 / np.mean(np.diff(df["time"])) # Fréquence d'échantillonnage
+    
+    # Application du filtre passe-bas
+    fs = 1.0 / np.mean(np.diff(df["time"]))  # Fréquence d'échantillonnage
+    # cutoff = 0.1  # Fréquence de coupure pour le filtre passe-bas
+    # df["Ptot"] = lowpass_filter(df["Ptot"], cutoff, fs)
     lowcut = 0.5 # Fréquence de coupure basse
     highcut = 1.0
     order = 4
+
+
+    seuil_poids = min_bite_weight
+
+    filtered_data['Index'] = np.arange(len(filtered_data))
+    filtered_data_true = filtered_data.copy()
+    filtered_data_wo_noise = filtered_data.copy()
+    n_true = np.arange(len(filtered_data_true))
+
+    indice = 0
+
+    while not pd.isna(indice):
+        val_ini = float(filtered_data_true.iloc[0]['Ptot'])
+
+        indices = np.where(np.abs(filtered_data_true['Ptot'] - val_ini) >= seuil_poids)[0]
+        if len(indices) > 0:
+            indice = indices[0] - 1
+        else:
+            indice = np.nan
+        
+        if not pd.isna(indice):
+            n_true = n_true[np.where(n_true == indice)[0][0]:]
+            indice_commun = np.where(filtered_data_true.iloc[0]['time'] == filtered_data_wo_noise['time'])[0][0]
+
+            filtered_data_wo_noise.loc[indice_commun:indice, 'Ptot'] = val_ini
+            n_true = n_true[1:]  
+            filtered_data_true = filtered_data_true[filtered_data_true['Index'] == n_true[0]:]
 
     # # Fonction de filtrage band-stop
     # def butter_bandstop(lowcut, highcut, fs, order=4):
