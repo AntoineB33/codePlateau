@@ -22,7 +22,7 @@ dossier = "./filtered_data"
 
 fichiers = []
 for f in os.listdir(dossier):
-    if f.endswith(".xlsx") and f == "5.xlsx":
+    if f.endswith(".xlsx") and f == "17.xlsx":
         fichiers.append(os.path.join(dossier, f))
 
 dossier_graphique = "./uzeir/result"
@@ -63,7 +63,7 @@ for fichier in fichiers:
 
 
 
-        # Filter smoothing time
+    # Filter smoothing time
     int_time = 0.2  # Time interval threshold
     indices_time = [df.index[0]]
 
@@ -95,7 +95,7 @@ for fichier in fichiers:
     df = filtered_df  # Update df with the noise-filtered data
 
 
-    
+
 
     # Calcul du poids consommé
     flag = False
@@ -158,6 +158,7 @@ for fichier in fichiers:
     min_diff = 50  # Minimum difference in indices between consecutive peaks
     final_peaks_indices = []
     merged_windows = []
+    activity_time = 0
     
     for i in range(len(valid_peaks)):
         if not final_peaks_indices:
@@ -169,6 +170,7 @@ for fichier in fichiers:
             if (valid_peaks[i] - last_peak_idx) > min_diff:
                 final_peaks_indices.append(valid_peaks[i])
                 merged_windows.append((window_start, window_end))
+                activity_time += df["time"].iloc[window_end] - df["time"].iloc[window_start]
                 window_start = valid_peaks[i]
                 window_end = valid_peaks[i]
             else:
@@ -189,12 +191,12 @@ for fichier in fichiers:
     bouchees = len(significant_peaks_y)  # Nombre de bouchées est le nombre de pics significatifs
 
     # Calcul du temps d'activité
-    if len(significant_peaks_x) > 0:
-        activity_start_time = significant_peaks_x[0]
-        activity_end_time = significant_peaks_x[-1]
-        activity_time = math.trunc(activity_end_time - activity_start_time)
-    else:
-        activity_time = 0
+    # if len(significant_peaks_x) > 0:
+    #     activity_start_time = significant_peaks_x[0]
+    #     activity_end_time = significant_peaks_x[-1]
+    #     activity_time = math.trunc(activity_end_time - activity_start_time)
+    # else:
+    #     activity_time = 0
 
     ratio = activity_time / temps_repas if temps_repas > 0 else 0
     print(f"Le ratio d'activité est : {ratio}")
@@ -246,6 +248,6 @@ for fichier in fichiers:
     # Enregistrement des graphiques
     filepath = os.path.join(
         dossier_graphique,
-        "Graph_{}.html".format(os.path.basename(fichier).split(".")[0]),
+        "Graph_{}_liss.html".format(os.path.basename(fichier).split(".")[0]),
     )
     fig.write_html(filepath)

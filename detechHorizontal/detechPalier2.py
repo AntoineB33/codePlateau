@@ -59,6 +59,38 @@ for fichier in fichiers:
     df = df[df["Ptot"] < 3000]  # Filtre sur le poids maximal de l'assiette
     df["time"] = df["time"] / 1000  # Conversion en secondes
 
+    
+    # Filter smoothing time
+    int_time = 0.2  # Time interval threshold
+    indices_time = [df.index[0]]
+
+    for i in range(1, len(df)):
+        if df["time"].iloc[i] - df["time"].iloc[indices_time[-1]] >= int_time:
+            indices_time.append(i)
+
+    df = df.iloc[indices_time].reset_index(drop=True)
+
+    if df.empty:
+        continue  # Skip further processing if no data remains after filtering
+    
+    # Filter smoothing weight
+    seuil_poids = 10  # Assuming a threshold, adjust as necessary
+    filtered_df = df.copy()
+    i = 0
+
+    while i < len(df) - 1:
+        val_ini = filtered_df["Ptot"].iloc[i]
+        j = i + 1
+
+        while j < len(df) and np.abs(df["Ptot"].iloc[j] - val_ini) < seuil_poids:
+            j += 1
+
+        if j < len(df):
+            filtered_df.loc[i:j-1, "Ptot"] = val_ini
+        i = j
+
+    df = filtered_df  # Update df with the noise-filtered data
+
 
 import pandas as pd
 import numpy as np

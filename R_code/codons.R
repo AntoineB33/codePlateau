@@ -17,12 +17,12 @@ library(openxlsx)
 dossier <- "c:/Users/comma/Documents/travail/Polytech/stage s8/gihtub/codePlateau/donneexslx/donneexslx"
 
 
-fichiers <- list.files(path = dossier, pattern = "5\\.xlsx$", full.names = TRUE)
+fichiers <- list.files(path = dossier, pattern = "^5.xlsx$", full.names = TRUE)
 # fichiers <- list.files(path = dossier, pattern = "\\.xlsx$", full.names = TRUE)
 # fichiers <- list.files(path = dossier, full.names = TRUE) # Renvoie un vecteur avec tous les fichiers contenus dans le dossier
 
 # dossier_graphique <- setwd("c:/Users/comma/Documents/travail/Polytech/stage s8/gihtub/codePlateau/result") # Chemin d'enregistrement des différents graphiques 
-dossier_graphique <- "c:/Users/comma/Documents/travail/Polytech/stage s8/gihtub/codePlateau/R_code/result"
+dossier_graphique <- "c:/Users/comma/Documents/travail/Polytech/stage s8/gihtub/codePlateau/R_code/result_R"
 
 
 Tableau_Final <- data.frame(Duree_Totale = numeric(),

@@ -206,6 +206,10 @@ for fichier in fichiers:
     
     for i in range(len(time_bites)):
         fig.add_trace(go.Scatter(x=[time_bites.iloc[i], time_bites.iloc[i]], y=[filtered_data["Ptot"].min(), weight_bites.iloc[i]],
+                                 mode='lines', name=f'Bouchée n°{i + 1}', line=dict(color='gray', dash='dot')))
+    
+    for i in range(len(time_bites)):
+        fig.add_trace(go.Scatter(x=[time_bites.iloc[i], time_bites.iloc[i]], y=[filtered_data["Ptot"].min(), weight_bites.iloc[i]],
                                  mode='lines', name=f'Bouchée n°{i + 1}', line=dict(color='green', dash='dot')))
 
 
