@@ -7,7 +7,7 @@ from plotly.subplots import make_subplots
 import openpyxl
 
 dossier = "c:/Users/comma/Documents/travail/Polytech/stage s8/gihtub/codePlateau/donneexslx/donneexslx"
-fichiers = [os.path.join(dossier, f) for f in os.listdir(dossier) if f == "5.xlsx"]
+fichiers = [os.path.join(dossier, f) for f in os.listdir(dossier) if f == "7.xlsx"]
 dossier_graphique = "c:/Users/comma/Documents/travail/Polytech/stage s8/gihtub/codePlateau/R_code/result"
 
 Tableau_Final = pd.DataFrame(columns=[

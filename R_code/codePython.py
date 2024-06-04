@@ -12,7 +12,7 @@ dossier = "c:/Users/comma/Documents/travail/Polytech/stage s8/gihtub/codePlateau
 dossier_graphique = "c:/Users/comma/Documents/travail/Polytech/stage s8/gihtub/codePlateau/R_code/result"
 
 # List all files in the directory
-fichiers = [os.path.join(dossier, f) for f in os.listdir(dossier) if f.endswith("5.xlsx")]
+fichiers = [os.path.join(dossier, f) for f in os.listdir(dossier) if f=="7.xlsx"]
 
 # Initialize the final dataframe
 Tableau_Final = pd.DataFrame(columns=["Duree_Totale", "Poids_Conso", "Action", "Duree_activite_Totale",
