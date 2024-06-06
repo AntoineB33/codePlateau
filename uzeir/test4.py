@@ -9,8 +9,8 @@ from scipy.signal import find_peaks, peak_prominences
 """"///////////////////Variables globales///////////////////"""
 bouchees = 0
 poids_min = float("inf")
-debut_time = None
-fin_time = None
+debut_time = 0
+fin_time = 0
 indice_debut = 0
 indice_fin = 0
 int_time = 0.2
@@ -22,11 +22,11 @@ min_inactivity = 1
 root = Tk()
 root.withdraw()
 
-dossier = "./filtered_data"
+dossier = ".\\"
 
 fichiers = []
 for f in os.listdir(dossier):
-    if f.endswith(".xlsx") and f == "7.xlsx":
+    if f.endswith(".xlsx") and f=="DATA(1).xlsx":
         fichiers.append(os.path.join(dossier, f))
 
 dossier_graphique = "./uzeir/result"
@@ -103,7 +103,7 @@ for fichier in fichiers:
             flag = True
             debut = df["Ptot"].iloc[i + 1]
     fin = df["Ptot"].iloc[-1]
-    poids_consome = math.trunc(debut - fin)
+    poids_consome = math.trunc(int(debut) - int(fin))
     print(f"Le poids consommé pendant le repas est : {poids_consome}")
 
     # Calcul de la durée du repas
@@ -120,7 +120,7 @@ for fichier in fichiers:
                     fin_time = df["time"].iloc[j]
                     indice_fin = i
             break
-    temps_repas = math.trunc(fin_time - debut_time)
+    temps_repas = math.trunc(int(fin_time) - int(debut_time))
     print(f"La durée du repas est : {convert_time(temps_repas)}")
 
     # Calcul du temps d'activité et du nombre de bouchée
