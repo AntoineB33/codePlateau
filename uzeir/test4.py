@@ -26,7 +26,8 @@ dossier = "."
 
 fichiers = []
 for f in os.listdir(dossier):
-    if f.endswith(".xlsx") and f=="DATA(1).xlsx":
+    # if f.endswith(".xlsx") and f=="DATA(1).xlsx":
+    if f.endswith(".xlsx") and f=="5.xlsx":
         fichiers.append(os.path.join(dossier, f))
 
 dossier_graphique = "./uzeir/result"
@@ -106,22 +107,22 @@ for fichier in fichiers:
     poids_consome = math.trunc(int(debut) - int(fin))
     print(f"Le poids consommé pendant le repas est : {poids_consome}")
 
-    # Calcul de la durée du repas
-    for i in range(len(df) - 1):
-        if (
-            df["Ptot"].iloc[i] > 700
-            and (df["Ptot"].iloc[i] + 4) < df["Ptot"].shift(-1).iloc[i]
-        ):
-            debut_time = df["time"].iloc[i + 1]
-            indice_debut = i
-            for j in range(i + 1, len(df)):
-                if df["Ptot"].iloc[j] < poids_min:
-                    poids_min = df["Ptot"].iloc[j]
-                    fin_time = df["time"].iloc[j]
-                    indice_fin = i
-            break
-    temps_repas = math.trunc(int(fin_time) - int(debut_time))
-    print(f"La durée du repas est : {convert_time(temps_repas)}")
+    # # Calcul de la durée du repas
+    # for i in range(len(df) - 1):
+    #     if (
+    #         df["Ptot"].iloc[i] > 700
+    #         and (df["Ptot"].iloc[i] + 4) < df["Ptot"].shift(-1).iloc[i]
+    #     ):
+    #         debut_time = df["time"].iloc[i + 1]
+    #         indice_debut = i
+    #         for j in range(i + 1, len(df)):
+    #             if df["Ptot"].iloc[j] < poids_min:
+    #                 poids_min = df["Ptot"].iloc[j]
+    #                 fin_time = df["time"].iloc[j]
+    #                 indice_fin = i
+    #         break
+    # temps_repas = math.trunc(int(fin_time) - int(debut_time))
+    # print(f"La durée du repas est : {convert_time(temps_repas)}")
 
     # Calcul du temps d'activité et du nombre de bouchée
     activity_time = 0
@@ -270,6 +271,10 @@ for fichier in fichiers:
     #     activity_time = math.trunc(activity_end_time - activity_start_time)
     # else:
     #     activity_time = 0
+    debut_time = merged_windows[0][0]
+    fin_time = merged_windows[-1][1]
+    temps_repas = fin_time - debut_time
+    print(f"La durée du repas est : {convert_time(temps_repas)}")
     ratio = activity_time / temps_repas if temps_repas > 0 else 0
     print(f"Le ratio d'activité est : {ratio}")
     print(f"Le nombre de bouchée pendant le repas est : {bouchees}")
