@@ -22,7 +22,7 @@ min_inactivity = 1
 root = Tk()
 root.withdraw()
 
-dossier = ".\\"
+dossier = "."
 
 fichiers = []
 for f in os.listdir(dossier):
