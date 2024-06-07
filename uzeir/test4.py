@@ -178,6 +178,7 @@ for fichier in fichiers:
     activity_time = 0
 
     stop_the_bite = False
+    window_start, window_end = 0, 0
     for i in range(len(valid_peaks)):
         if not final_peaks_indices:
             final_peaks_indices.append(valid_peaks[i])

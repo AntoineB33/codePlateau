@@ -159,7 +159,6 @@ for fichier in fichiers:
     final_peaks_indices = []
     merged_windows = []
     activity_time = 0
-    window_start = 0
     for i in range(len(valid_peaks)):
         if not final_peaks_indices:
             final_peaks_indices.append(valid_peaks[i])
