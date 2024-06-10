@@ -17,20 +17,24 @@ int_time = 0.2
 seuil_poids = 4
 min_bite_duration = 1  # Minimum bite duration in seconds
 min_inactivity = 1
+min_peak = 20
 """/////////////////////////////////////////////////////////"""
 
 root = Tk()
 root.withdraw()
 
-dossier = "."
+dossier = r".\filtered_data"
+# dossier = r".\data_du_bureau\xlsx"
+
+dossier_graphique = "./uzeir/result"
 
 fichiers = []
 for f in os.listdir(dossier):
     # if f.endswith(".xlsx") and f=="DATA(1).xlsx":
-    if f.endswith(".xlsx") and f=="5.xlsx":
+    # if f.endswith(".xlsx") and f=="7.xlsx":
+    if f.endswith(".xlsx"):
         fichiers.append(os.path.join(dossier, f))
 
-dossier_graphique = "./uzeir/result"
 
 Tableau_Final = pd.DataFrame(
     columns=[
@@ -62,9 +66,9 @@ for fichier in fichiers:
     print(fichier)
     df = pd.read_excel(fichier)
     df.columns = ["time", "Ptot"]
-    df = df[df["Ptot"] > 100]
-    df["Ptot"] = np.abs(df["Ptot"])
-    df = df[df["Ptot"] < 3000]
+    # df = df[df["Ptot"] > 100]
+    # df["Ptot"] = np.abs(df["Ptot"])
+    # df = df[df["Ptot"] < 3000]
     df["time"] = df["time"] / 1000
 
     # Filter smoothing time
@@ -90,22 +94,22 @@ for fichier in fichiers:
         while j < len(df) and np.abs(df["Ptot"].iloc[j] - val_ini) < seuil_poids:
             j += 1
 
-        if j < len(df):
+        if j <= len(df):
             filtered_df.loc[i : j - 1, "Ptot"] = val_ini
         i = j
 
     df = filtered_df  # Update df with the noise-filtered data
 
-    # Calcul du poids consommé
-    flag = False
-    debut = 0
-    for i in range(10, len(df) - 1):
-        if not flag and df["Ptot"].iloc[i] + 4 < df["Ptot"].shift(-1).iloc[i]:
-            flag = True
-            debut = df["Ptot"].iloc[i + 1]
-    fin = df["Ptot"].iloc[-1]
-    poids_consome = math.trunc(int(debut) - int(fin))
-    print(f"Le poids consommé pendant le repas est : {poids_consome}")
+    # # Calcul du poids consommé
+    # flag = False
+    # debut = 0
+    # for i in range(10, len(df) - 1):
+    #     if not flag and df["Ptot"].iloc[i] + 4 < df["Ptot"].shift(-1).iloc[i]:
+    #         flag = True
+    #         debut = df["Ptot"].iloc[i + 1]
+    # fin = df["Ptot"].iloc[-1]
+    # poids_consome = math.trunc(int(debut) - int(fin))
+    # print(f"Le poids consommé pendant le repas est : {poids_consome}")
 
     # # Calcul de la durée du repas
     # for i in range(len(df) - 1):
@@ -178,84 +182,95 @@ for fichier in fichiers:
     merged_windows = []
     activity_time = 0
 
-    stop_the_bite = False
+    stop_the_bite = True
+    firstPoint = True
     window_start, window_end = 0, 0
-    for i in range(len(valid_peaks)):
-        if not final_peaks_indices:
-            final_peaks_indices.append(valid_peaks[i])
-            window_start = valid_peaks[i]
-            window_end = valid_peaks[i]
-        else:
-            last_peak_idx = final_peaks_indices[-1]
-            stop_the_bite = (valid_peaks[i] - last_peak_idx) > min_diff
-            # if df["time"].iloc[valid_peaks[i]] > 277:
-            #     print("valid_peaks[i]", valid_peaks[i])
-
-            exploring_horizontal = 5
-            for j in range(window_start, -1, -1):
-                if df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]:
-                    exploring_horizontal -= 1
-                    if exploring_horizontal == 0:
-                        break
-                else:
+    valid_point_nb = len(valid_peaks)
+    add_peak_update_next = True
+    allPeaksFound = False
+    while not allPeaksFound:
+        i = 0
+        while i <= len(valid_peaks):
+            if final_peaks_indices:
+                lastI = i == valid_point_nb
+                if stop_the_bite:
+                    # increase the window to the left
                     exploring_horizontal = 5
-                    window_start = j - 1
-            if stop_the_bite:
-                exploring_horizontal = 5
-                for j in range(window_end, valid_peaks[i]):
-                    if df["Ptot"].iloc[j] == df["Ptot"].iloc[j + 1]:
-                        exploring_horizontal -= 1
-                        if exploring_horizontal == 0:
-                            break
+                    for j in range(window_start, -1, -1):
+                        if df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]:
+                            exploring_horizontal -= 1
+                            if exploring_horizontal == 0:
+                                break
+                        else:
+                            exploring_horizontal = 5
+                            window_start = j - 1
+                upTo = len(df) - 1 if lastI else valid_peaks[i]
+                stop_the_bite = lastI or (upTo - final_peaks_indices[-1]) > min_diff
+                if stop_the_bite:
+                    # increase the window to the right
+                    exploring_horizontal = 5
+                    for j in range(window_end, upTo):
+                        if df["Ptot"].iloc[j] == df["Ptot"].iloc[j + 1]:
+                            exploring_horizontal -= 1
+                            if exploring_horizontal == 0:
+                                break
+                        else:
+                            exploring_horizontal = 5
+                            window_end = j + 1
+                    stop_the_bite = lastI or (upTo - window_end) > min_diff
+                if not stop_the_bite:
+                    # cut into two bites if a long period of inactivity is found in the bite window
+                    last_activity = window_end
+                    for window_endi in range(window_end, upTo):
+                        if df["Ptot"].iloc[window_endi] != df["Ptot"].iloc[window_endi + 1]:
+                            if (
+                                df["time"].iloc[window_endi]
+                                - df["time"].iloc[last_activity]
+                                > min_inactivity
+                            ):
+                                stop_the_bite = True
+                                window_end = last_activity
+                                break
+                            last_activity = window_endi + 1
+                if stop_the_bite:
+                    # check if the activity decreases the amount of food
+                    if df["Ptot"].iloc[window_end] < df["Ptot"].iloc[window_start]:
+                        merged_windows.append((window_start, window_end))
+                        activity_time += (
+                            df["time"].iloc[window_end] - df["time"].iloc[window_start]
+                        )
+                        # if len(merged_windows) > 1 and df["Ptot"].iloc[window_start] < df["Ptot"].iloc[merged_windows[-2][1]]:
+                        #     last_quantity = df["Ptot"].iloc[merged_windows[-2][1]]
+                        #     in_peak = False
+                        #     for j in range(merged_windows[-2][1] + 1, window_start):
+                        #         if df["Ptot"].iloc[j] > last_quantity + min_peak:
+                        #             valid_peaks = np.insert(valid_peaks, i - 1, j)
+                        #             i += 1
+                        #             in_peak = True
+                        #         elif in_peak and df["Ptot"].iloc[j] < last_quantity:
+                        #             last_quantity = df["Ptot"].iloc[j]
+                        #         elif in_peak and df["Ptot"].iloc[j] == last_quantity:
+                        #             in_peak = False
+                        #         elif not in_peak and df["Ptot"].iloc[j] < last_quantity and j > 0 and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]:
+                        #             last_quantity = df["Ptot"].iloc[j]
                     else:
-                        exploring_horizontal = 5
-                        window_end = j + 1
-                # while (
-                #     window_end + 1 < len(df)
-                #     and df["Ptot"].iloc[window_end] != df["Ptot"].iloc[window_end + 1] or exploring_horizontal > 0
-                # ):
-                #     window_end += 1
-                stop_the_bite = (valid_peaks[i] - window_end) > min_diff
-            if not stop_the_bite:
-                last_activity = window_end
-                for window_endi in range(window_end, valid_peaks[i]):
-                    if df["Ptot"].iloc[window_endi] != df["Ptot"].iloc[window_endi + 1]:
-                        if (
-                            df["time"].iloc[window_endi]
-                            - df["time"].iloc[last_activity]
-                            > min_inactivity
-                        ):
-                            stop_the_bite = True
-                            window_end = last_activity
-                            break
-                        last_activity = window_endi + 1
-            if stop_the_bite:
-                if df["Ptot"].iloc[window_end] < df["Ptot"].iloc[window_start - 1]:
-                    # if df["time"].iloc[window_end] > 257:
-                    #     print("window_end", window_end)
-                    merged_windows.append((window_start, window_end))
-                    activity_time += (
-                        df["time"].iloc[window_end] - df["time"].iloc[window_start - 1]
-                    )
+                        del final_peaks_indices[-1]
+                    add_peak_update_next = not lastI
                 else:
-                    del final_peaks_indices[-1]
+                    # Merge peaks if they are close
+                    window_end = valid_peaks[i]
+                    if (
+                        valid_prominences[i]
+                        > valid_prominences[np.where(valid_peaks == final_peaks_indices[-1])[0][0]]
+                    ):
+                        final_peaks_indices[-1] = valid_peaks[i]
+            if add_peak_update_next:
                 final_peaks_indices.append(valid_peaks[i])
                 window_start = valid_peaks[i]
                 window_end = valid_peaks[i]
-            else:
-                # Merge peaks if they are close
-                window_end = valid_peaks[i]
-                if (
-                    valid_prominences[i]
-                    > valid_prominences[np.where(valid_peaks == last_peak_idx)[0][0]]
-                ):
-                    final_peaks_indices[-1] = valid_peaks[i]
-        # Ensure the window includes the whole peak
-        window_start = min(window_start, valid_peaks[i])
-        window_end = max(window_end, valid_peaks[i])
-
-    # Add the last window
-    merged_windows.append((window_start, window_end))
+                add_peak_update_next = False
+            i += 1
+        allPeaksFound = True
 
     significant_peaks_x = df["time"].iloc[final_peaks_indices].values
     significant_peaks_y = df["Ptot"].iloc[final_peaks_indices].values
@@ -271,14 +286,23 @@ for fichier in fichiers:
     #     activity_time = math.trunc(activity_end_time - activity_start_time)
     # else:
     #     activity_time = 0
-    debut_time = merged_windows[0][0]
-    fin_time = merged_windows[-1][1]
-    temps_repas = fin_time - debut_time
-    print(f"La durée du repas est : {convert_time(temps_repas)}")
+
+    if bouchees:
+        debut_time = merged_windows[0][0]
+        fin_time = merged_windows[-1][1]
+        
+        poids_consome = df["Ptot"].iloc[debut_time] - df["Ptot"].iloc[fin_time]
+        temps_repas = df["time"].iloc[fin_time] - df["time"].iloc[debut_time]
+    else:
+        poids_consome = 0
+        temps_repas = 0
     ratio = activity_time / temps_repas if temps_repas > 0 else 0
+
+    print(f"Le poids consommé pendant le repas est : {poids_consome}")
+    print(f"La durée du repas est : {convert_time(temps_repas)}")
+    print(f"Le temps d'activité est : {convert_time(activity_time)}")
     print(f"Le ratio d'activité est : {ratio}")
     print(f"Le nombre de bouchée pendant le repas est : {bouchees}")
-    print(f"Le temps d'activité est : {convert_time(activity_time)}")
 
     # Création de graphiques avec Plotly
     fig = Figure()
@@ -328,24 +352,24 @@ for fichier in fichiers:
     fig.add_annotation(
         x=df["time"].iloc[-1],
         y=df["Ptot"].max(),
-        text=f"Poids consommé: {poids_consome} g<br>Nombre de bouchées: {bouchees}<br>Temps d'activité: {convert_time(activity_time)}<br>Ratio d'activité: {ratio:.2f}",
+        text=f"Poids consommé: {poids_consome} g<br>Durée du repas: {convert_time(temps_repas)}<br>Temps d'activité sur l'assiette: {convert_time(activity_time)}<br>Ratio d'activité: {ratio:.2f}<br>Nombre de bouchées: {bouchees}",
         showarrow=False,
         align="left",
         xanchor="right",
         yanchor="top",
     )
 
-    valid_peaks_x = df["time"].iloc[valid_peaks].values
-    valid_peaks_y = df["Ptot"].iloc[valid_peaks].values
-    fig.add_trace(
-        Scatter(
-            y=valid_peaks_y,
-            x=valid_peaks_x,
-            mode="markers",
-            name="Pics significatifs",
-            marker=dict(color="blue", size=8),
-        )
-    )
+    # valid_peaks_x = df["time"].iloc[valid_peaks].values
+    # valid_peaks_y = df["Ptot"].iloc[valid_peaks].values
+    # fig.add_trace(
+    #     Scatter(
+    #         y=valid_peaks_y,
+    #         x=valid_peaks_x,
+    #         mode="markers",
+    #         name="Pics significatifs",
+    #         marker=dict(color="blue", size=8),
+    #     )
+    # )
 
     # Enregistrement des graphiques
     filepath = os.path.join(
