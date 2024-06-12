@@ -6,6 +6,8 @@ from plotly.graph_objects import Figure, Scatter
 from tkinter import filedialog, Tk
 from scipy.signal import find_peaks, peak_prominences
 
+from scipy.fft import fft
+
 """"///////////////////Variables globales///////////////////"""
 bouchees = 0
 poids_min = float("inf")
@@ -23,16 +25,16 @@ min_peak = 20
 root = Tk()
 root.withdraw()
 
-dossier = r".\filtered_data"
+dossier = r"C:\Users\comma\Documents\travail\Polytech\stage s8\gihtub\codePlateau\Resultats exp bag_couverts\Resultats exp bag_couverts\28_05_24_xlsx"
 # dossier = r".\data_du_bureau\xlsx"
 
-dossier_graphique = "./uzeir/result"
+dossier_graphique = r"C:\Users\comma\Documents\travail\Polytech\stage s8\gihtub\codePlateau\Resultats exp bag_couverts\Resultats exp bag_couverts\28_05_24_graph"
 
 fichiers = []
 for f in os.listdir(dossier):
-    # if f.endswith(".xlsx") and f=="DATA(1).xlsx":
-    # if f.endswith(".xlsx") and f=="7.xlsx":
-    if f.endswith(".xlsx"):
+    if f.endswith(".xlsx") and f=="2Plateaux-P1-bag.xlsx":
+    # if f.endswith(".xlsx") and f=="5.xlsx":
+    # if f.endswith(".xlsx"):
         fichiers.append(os.path.join(dossier, f))
 
 
@@ -59,6 +61,47 @@ def convert_time(seconds):
     minutes = seconds // 60
     seconds = int(seconds) % 60
     return f"{minutes} min {seconds} s"
+
+
+def extract_features(segment):
+    features = {}
+    weights = segment["Ptot"].values
+    times = segment["time"].values
+
+    features["Duration"] = times[-1] - times[0]
+    features["MaxWeight"] = np.max(weights)
+    features["MinWeight"] = np.min(weights)
+    features["MeanWeight"] = np.mean(weights)
+    features["StdDevWeight"] = np.std(weights)
+
+    # Calculate second derivative
+    if len(weights) > 2:
+        second_derivative = np.diff(np.diff(weights))
+        features["SecondDerivative"] = np.mean(second_derivative)
+    else:
+        features["SecondDerivative"] = 0
+
+    # Frequency components using FFT
+    freq_components = np.abs(fft(weights))
+    features["FrequencyComponent1"] = (
+        freq_components[1] if len(freq_components) > 1 else 0
+    )
+    features["FrequencyComponent2"] = (
+        freq_components[2] if len(freq_components) > 2 else 0
+    )
+
+    # Skewness and Kurtosis
+    features["Skewness"] = pd.Series(weights).skew()
+    features["Kurtosis"] = pd.Series(weights).kurtosis()
+
+    # Peak analysis
+    peaks, properties = find_peaks(weights, prominence=1)
+    features["PeakCount"] = len(peaks)
+    features["PeakProminence"] = (
+        np.mean(properties["prominences"]) if "prominences" in properties else 0
+    )
+
+    return features
 
 
 # Traitement des fichiers
@@ -99,34 +142,6 @@ for fichier in fichiers:
         i = j
 
     df = filtered_df  # Update df with the noise-filtered data
-
-    # # Calcul du poids consommé
-    # flag = False
-    # debut = 0
-    # for i in range(10, len(df) - 1):
-    #     if not flag and df["Ptot"].iloc[i] + 4 < df["Ptot"].shift(-1).iloc[i]:
-    #         flag = True
-    #         debut = df["Ptot"].iloc[i + 1]
-    # fin = df["Ptot"].iloc[-1]
-    # poids_consome = math.trunc(int(debut) - int(fin))
-    # print(f"Le poids consommé pendant le repas est : {poids_consome}")
-
-    # # Calcul de la durée du repas
-    # for i in range(len(df) - 1):
-    #     if (
-    #         df["Ptot"].iloc[i] > 700
-    #         and (df["Ptot"].iloc[i] + 4) < df["Ptot"].shift(-1).iloc[i]
-    #     ):
-    #         debut_time = df["time"].iloc[i + 1]
-    #         indice_debut = i
-    #         for j in range(i + 1, len(df)):
-    #             if df["Ptot"].iloc[j] < poids_min:
-    #                 poids_min = df["Ptot"].iloc[j]
-    #                 fin_time = df["time"].iloc[j]
-    #                 indice_fin = i
-    #         break
-    # temps_repas = math.trunc(int(fin_time) - int(debut_time))
-    # print(f"La durée du repas est : {convert_time(temps_repas)}")
 
     # Calcul du temps d'activité et du nombre de bouchée
     activity_time = 0
@@ -222,7 +237,10 @@ for fichier in fichiers:
                     # cut into two bites if a long period of inactivity is found in the bite window
                     last_activity = window_end
                     for window_endi in range(window_end, upTo):
-                        if df["Ptot"].iloc[window_endi] != df["Ptot"].iloc[window_endi + 1]:
+                        if (
+                            df["Ptot"].iloc[window_endi]
+                            != df["Ptot"].iloc[window_endi + 1]
+                        ):
                             if (
                                 df["time"].iloc[window_endi]
                                 - df["time"].iloc[last_activity]
@@ -239,20 +257,20 @@ for fichier in fichiers:
                         activity_time += (
                             df["time"].iloc[window_end] - df["time"].iloc[window_start]
                         )
-                        # if len(merged_windows) > 1 and df["Ptot"].iloc[window_start] < df["Ptot"].iloc[merged_windows[-2][1]]:
-                        #     last_quantity = df["Ptot"].iloc[merged_windows[-2][1]]
-                        #     in_peak = False
-                        #     for j in range(merged_windows[-2][1] + 1, window_start):
-                        #         if df["Ptot"].iloc[j] > last_quantity + min_peak:
-                        #             valid_peaks = np.insert(valid_peaks, i - 1, j)
-                        #             i += 1
-                        #             in_peak = True
-                        #         elif in_peak and df["Ptot"].iloc[j] < last_quantity:
-                        #             last_quantity = df["Ptot"].iloc[j]
-                        #         elif in_peak and df["Ptot"].iloc[j] == last_quantity:
-                        #             in_peak = False
-                        #         elif not in_peak and df["Ptot"].iloc[j] < last_quantity and j > 0 and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]:
-                        #             last_quantity = df["Ptot"].iloc[j]
+                        if len(merged_windows) > 1 and df["Ptot"].iloc[window_start] < df["Ptot"].iloc[merged_windows[-2][1]]:
+                            last_quantity = df["Ptot"].iloc[merged_windows[-2][1]]
+                            in_peak = False
+                            for j in range(merged_windows[-2][1] + 1, window_start):
+                                if df["Ptot"].iloc[j] > last_quantity + min_peak:
+                                    valid_peaks = np.insert(valid_peaks, i - 1, j)
+                                    i += 1
+                                    in_peak = True
+                                elif in_peak and df["Ptot"].iloc[j] < last_quantity:
+                                    last_quantity = df["Ptot"].iloc[j]
+                                elif in_peak and df["Ptot"].iloc[j] == last_quantity:
+                                    in_peak = False
+                                elif not in_peak and df["Ptot"].iloc[j] < last_quantity and j > 0 and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]:
+                                    last_quantity = df["Ptot"].iloc[j]
                     else:
                         del final_peaks_indices[-1]
                     add_peak_update_next = not lastI
@@ -261,7 +279,9 @@ for fichier in fichiers:
                     window_end = valid_peaks[i]
                     if (
                         valid_prominences[i]
-                        > valid_prominences[np.where(valid_peaks == final_peaks_indices[-1])[0][0]]
+                        > valid_prominences[
+                            np.where(valid_peaks == final_peaks_indices[-1])[0][0]
+                        ]
                     ):
                         final_peaks_indices[-1] = valid_peaks[i]
             if add_peak_update_next:
@@ -290,7 +310,7 @@ for fichier in fichiers:
     if bouchees:
         debut_time = merged_windows[0][0]
         fin_time = merged_windows[-1][1]
-        
+
         poids_consome = df["Ptot"].iloc[debut_time] - df["Ptot"].iloc[fin_time]
         temps_repas = df["time"].iloc[fin_time] - df["time"].iloc[debut_time]
     else:
@@ -359,21 +379,36 @@ for fichier in fichiers:
         yanchor="top",
     )
 
-    # valid_peaks_x = df["time"].iloc[valid_peaks].values
-    # valid_peaks_y = df["Ptot"].iloc[valid_peaks].values
-    # fig.add_trace(
-    #     Scatter(
-    #         y=valid_peaks_y,
-    #         x=valid_peaks_x,
-    #         mode="markers",
-    #         name="Pics significatifs",
-    #         marker=dict(color="blue", size=8),
-    #     )
-    # )
+    valid_peaks_x = df["time"].iloc[valid_peaks].values
+    valid_peaks_y = df["Ptot"].iloc[valid_peaks].values
+    fig.add_trace(
+        Scatter(
+            y=valid_peaks_y,
+            x=valid_peaks_x,
+            mode="markers",
+            name="Pics significatifs",
+            marker=dict(color="blue", size=8),
+        )
+    )
 
     # Enregistrement des graphiques
     filepath = os.path.join(
         dossier_graphique,
-        "Graph_{}_liss.html".format(os.path.basename(fichier).split(".")[0]),
+        "Graph_{}.html".format(os.path.basename(fichier).split(".")[0]),
     )
     fig.write_html(filepath)
+
+    # Extract features for each bite and store in a list
+    feature_list = []
+    for start_idx, end_idx in merged_windows:
+        segment = df.iloc[start_idx : end_idx + 1]
+        features = extract_features(segment)
+        features["BiteID"] = len(feature_list) + 1  # Unique identifier for each bite
+        # Add the known label here if available, e.g., features['Label'] = 'Fork'
+        feature_list.append(features)
+
+    # Convert to DataFrame
+    features_df = pd.DataFrame(feature_list)
+
+    # Save to CSV
+    features_df.to_csv("bite_features.csv", index=False)
