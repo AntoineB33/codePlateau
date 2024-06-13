@@ -38,10 +38,10 @@ excel_titles = [
 root = Tk()
 root.withdraw()
 
-dossier = r"C:\Users\comma\Documents\travail\Polytech\stage s8\gihtub\codePlateau\Resultats exp bag_couverts\Resultats exp bag_couverts\27_05_24_xlsx"
+dossier = r".\Resultats exp bag_couverts\Resultats exp bag_couverts\27_05_24_xlsx"
 # dossier = r".\data_du_bureau\xlsx"
 
-dossier_graphique = r"C:\Users\comma\Documents\travail\Polytech\stage s8\gihtub\codePlateau\Resultats exp bag_couverts\Resultats exp bag_couverts\27_05_24_graph"
+dossier_graphique = r".\Resultats exp bag_couverts\Resultats exp bag_couverts\27_05_24_graph"
 
 date_folder = "_27_05_24"
 
@@ -249,6 +249,8 @@ for fichier in fichiers:
                         else:
                             exploring_horizontal = 5
                             window_end = j + 1
+                            if window_end == 997:
+                                print(5)
                     stop_the_bite = lastI or (upTo - window_end) > min_diff
                 if not stop_the_bite:
                     # cut into two bites if a long period of inactivity is found in the bite window
@@ -265,11 +267,13 @@ for fichier in fichiers:
                             ):
                                 stop_the_bite = True
                                 window_end = last_activity
+                                if window_end == 997:
+                                    print(5)
                                 break
                             last_activity = window_endi + 1
                 if stop_the_bite:
-                    # if window_start > 671:
-                    #     print(7)
+                    if window_start == 848:
+                        print(7)
                     merged_windows.append((window_start, window_end))
                     Duree_activity = (
                         df["time"].iloc[window_end] - df["time"].iloc[window_start]
@@ -290,13 +294,13 @@ for fichier in fichiers:
                             len(merged_windows) > 1
                             and df["Ptot"].iloc[window_start]
                             < df["Ptot"].iloc[merged_windows[-2][1]]
-                        ):
+                         and 10):
                             # go back to see where would be the missing bite
-                            last_quantity = df["Ptot"].iloc[merged_windows[-2][1]]
+                            # last_quantity = df["Ptot"].iloc[merged_windows[-2][1]]
                             in_peak = False
                             for j in range(merged_windows[-2][1] + 1, window_start):
-                                if df["time"].iloc[j]>=390.95:
-                                    print(5)
+                                # if df["time"].iloc[j]>=390.95:
+                                #     print(5)
                                 if j>0 and df["Ptot"].iloc[j] > df["Ptot"].iloc[j - 1]:
                                     valid_peaks = np.insert(valid_peaks, i - 1, j)
                                     valid_prominences = np.insert(
@@ -304,31 +308,33 @@ for fichier in fichiers:
                                     )
                                     allPeaksFound = False
                                     i += 1
-                                if df["Ptot"].iloc[j] > last_quantity + min_peak:
-                                    valid_peaks = np.insert(valid_peaks, i - 1, j)
-                                    valid_prominences = np.insert(
-                                        valid_prominences, i - 1, 0
-                                    )
-                                    allPeaksFound = False
-                                    i += 1
-                                    in_peak = True
-                                    exploring_horizontal = 5
-                                elif (
-                                    not in_peak
-                                    and df["Ptot"].iloc[j] < last_quantity
-                                    and j > 0
-                                    and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]
-                                ):
-                                    last_quantity = df["Ptot"].iloc[j]
-                                elif j>0 and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]:
-                                    if exploring_horizontal == 0:
-                                        last_quantity = df["Ptot"].iloc[j]
-                                    exploring_horizontal-=1
-                                    in_peak = False
+                                # if df["Ptot"].iloc[j] > last_quantity + min_peak:
+                                #     valid_peaks = np.insert(valid_peaks, i - 1, j)
+                                #     valid_prominences = np.insert(
+                                #         valid_prominences, i - 1, 0
+                                #     )
+                                #     allPeaksFound = False
+                                #     i += 1
+                                #     in_peak = True
+                                #     exploring_horizontal = 5
+                                # elif (
+                                #     not in_peak
+                                #     and df["Ptot"].iloc[j] < last_quantity
+                                #     and j > 0
+                                #     and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]
+                                # ):
+                                #     last_quantity = df["Ptot"].iloc[j]
+                                # elif j>0 and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]:
+                                #     if exploring_horizontal == 0:
+                                #         last_quantity = df["Ptot"].iloc[j]
+                                #     exploring_horizontal-=1
+                                #     in_peak = False
                     add_peak_update_next = not lastI
                 else:
                     # Merge peaks if they are close
                     window_end = valid_peaks[i]
+                    if window_end == 997:
+                        print(5)
                     if (
                         valid_prominences[i]
                         > valid_prominences[
@@ -340,6 +346,8 @@ for fichier in fichiers:
                 final_peaks_indices.append(valid_peaks[i])
                 window_start = valid_peaks[i]
                 window_end = valid_peaks[i]
+                if window_end == 997:
+                    print(5)
                 add_peak_update_next = False
             i += 1
 
@@ -472,25 +480,25 @@ for fichier in fichiers:
     features_df.to_csv("bite_features.csv", index=False)
 
 
-# # Open an existing workbook
-# workbook = openpyxl.load_workbook(excel_all_path)
+# Open an existing workbook
+workbook = openpyxl.load_workbook(excel_all_path)
 
-# # Select the active worksheet (you can also select a specific sheet by name)
-# sheet = workbook.active
+# Select the active worksheet (you can also select a specific sheet by name)
+sheet = workbook.active
 
 
-# for fichier in fichiers:
-#     # Iterate through each row in the column
-#     search_string = fichier.rsplit("\\", 1)[1].replace(".xlsx", date_folder)
-#     for row_num in range(1, sheet.max_row + 1):
-#         cell_value = sheet[f"T{row_num}"].value
-#         if cell_value == search_string:
-#             for index, key in enumerate(excel_titles, start=11):
-#                 cell = sheet.cell(
-#                     row=row_num, column=index
-#                 )  # Column 'S' is the 19th column
-#                 cell.value = new_excel[fichier][key]
-#             break
+for fichier in fichiers:
+    # Iterate through each row in the column
+    search_string = fichier.rsplit("\\", 1)[1].replace(".xlsx", date_folder)
+    for row_num in range(1, sheet.max_row + 1):
+        cell_value = sheet[f"T{row_num}"].value
+        if cell_value == search_string:
+            for index, key in enumerate(excel_titles, start=11):
+                cell = sheet.cell(
+                    row=row_num, column=index
+                )  # Column 'S' is the 19th column
+                cell.value = new_excel[fichier][key]
+            break
 
-# # Save the changes to the workbook
-# workbook.save(excel_all_path)
+# Save the changes to the workbook
+workbook.save(excel_all_path)
