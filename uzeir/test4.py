@@ -7,13 +7,15 @@ from tkinter import filedialog, Tk
 from scipy.signal import find_peaks, peak_prominences
 
 import win32com.client
+import win32api
+
 
 from scipy.fft import fft
 
 """"///////////////////Variables globales///////////////////"""
 poids_min = float("inf")
-debut_time = 0
-fin_time = 0
+debut_ind = 0
+fin_ind = 0
 indice_debut = 0
 indice_fin = 0
 int_time = 0.2
@@ -44,16 +46,16 @@ excel_titles = [
 root = Tk()
 root.withdraw()
 
-dossier = r".\Resultats exp bag_couverts\Resultats exp bag_couverts\28_05_24_xlsx"
+dossier = r".\Resultats exp bag_couverts\Resultats exp bag_couverts\27_05_24_xlsx"
 # dossier = r".\data_du_bureau\xlsx"
 
-dossier_graphique = r".\Resultats exp bag_couverts\Resultats exp bag_couverts\28_05_24_graph"
+dossier_graphique = r".\Resultats exp bag_couverts\Resultats exp bag_couverts\27_05_24_graph"
 
-date_folder = "_28_05_24"
+date_folder = "_27_05_24"
 
 fichiers = []
 for f in os.listdir(dossier):
-    if f.endswith(".xlsx") and (f == "4Plateaux-P2-bag.xlsx" or 0):
+    if f.endswith(".xlsx") and (f == "4Plateaux-P1-bag.xlsx" or 0):
         fichiers.append(os.path.join(dossier, f))
 
 
@@ -448,7 +450,7 @@ for fichier in fichiers:
                             for j in range(merged_windows[-2][1] + 1, window_start):
                                 # if df["time"].iloc[j]>=390.95:
                                 #     print(5)
-                                if j>0 and df["Ptot"].iloc[j] > df["Ptot"].iloc[j - 1]:
+                                if j>0 and df["Ptot"].iloc[j] != df["Ptot"].iloc[j - 1]:
                                     # if j == 719 or j == 722 or j == 723 or j == 725:
                                     #     print(7)
                                     valid_peaks = np.insert(valid_peaks, firstPeakAfterPrevAct, j)
@@ -502,8 +504,6 @@ for fichier in fichiers:
                 add_peak_update_next = False
             i += 1
 
-    significant_peaks_x = df["time"].iloc[final_peaks_indices].values
-    significant_peaks_y = df["Ptot"].iloc[final_peaks_indices].values
 
     # Calcul du temps d'activité
     # if len(significant_peaks_x) > 0:
@@ -514,20 +514,25 @@ for fichier in fichiers:
     #     activity_time = 0
 
     if bouchees:
-        debut_time = 0
-        while not is_bite[debut_time]:
-            debut_time += 1
-        fin_time = len(is_bite) - 1
-        while not is_bite[fin_time]:
-            fin_time -= 1
-        merged_windows = merged_windows[debut_time:fin_time]
-        fin_time = len(merged_windows)
+        debut_ind = 0
+        while not is_bite[debut_ind]:
+            debut_ind += 1
+        fin_ind = len(is_bite)
+        while fin_ind > 0 and not is_bite[fin_ind - 1]:
+            fin_ind -= 1
+        merged_windows = merged_windows[debut_ind:fin_ind]
+        final_peaks_indices = final_peaks_indices[debut_ind:fin_ind]
+        is_bite = is_bite[debut_ind:fin_ind]
 
-        poids_consome = df["Ptot"].iloc[0] - df["Ptot"].iloc[fin_time]
-        temps_repas = df["time"].iloc[fin_time] - df["time"].iloc[0]
+        debut_time = merged_windows[0][0]
+        fin_time = merged_windows[-1][1]
+        poids_consome = df["Ptot"].iloc[debut_time] - df["Ptot"].iloc[fin_time]
+        temps_repas = df["time"].iloc[fin_time] - df["time"].iloc[debut_time]
     else:
         poids_consome = 0
         temps_repas = 0
+    significant_peaks_x = df["time"].iloc[final_peaks_indices].values
+    significant_peaks_y = df["Ptot"].iloc[final_peaks_indices].values
     ratio = activity_time / temps_repas if temps_repas > 0 else 0
 
     print(f"Le poids consommé pendant le repas est : {poids_consome}")
@@ -549,12 +554,12 @@ for fichier in fichiers:
 
     # storing the duration of each action
     segments = []
-    for index, window in enumerate(merged_windows, start=1):
-        segments.append([window[1] - window[0], int(is_bite[index])])
-        if index + 1 <len(merged_windows):
-            diff = merged_windows[index + 1][0] - merged_windows[index][1]
+    for index, window in enumerate(merged_windows):
+        segments.append([df["time"].iloc[window[1]] - df["time"].iloc[window[0]], int(is_bite[index])])
+        if index + 1 < len(merged_windows):
+            diff = df["time"].iloc[merged_windows[index + 1][0]] - df["time"].iloc[window[1]]
             if diff:
-                segments.append([window[1] - window[0], 2])
+                segments.append([diff, 2])
     new_excel[fichier]["segments"] = segments
 
     # Création de graphiques avec Plotly
@@ -654,6 +659,7 @@ def open_excel(file_path, sheet_name):
     excel = win32com.client.Dispatch("Excel.Application")
     excel.Visible = True
 
+    file_path = os.path.abspath(file_path)
     # Open the workbook (or attach to it if it's already open)
     try:
         workbook = excel.Workbooks.Open(file_path)
@@ -664,7 +670,15 @@ def open_excel(file_path, sheet_name):
     sheet = workbook.Sheets(sheet_name)
     return workbook, sheet
 
-fills = [activityWithoutBite_bgColor, activityWithBite_bgColor, noActivity_bgColor]
+def rgb_to_bgr(rgb_color):
+    red = (rgb_color >> 16) & 0xFF
+    green = (rgb_color >> 8) & 0xFF
+    blue = rgb_color & 0xFF
+    bgr_color = (blue << 16) | (green << 8) | red
+    return bgr_color
+
+fills = [rgb_to_bgr(color) for color in [activityWithoutBite_bgColor, activityWithBite_bgColor, noActivity_bgColor]]
+
 
 workbook, sheet = open_excel(excel_all_path, sheet_name)
 workbook_segments, sheet_segments = open_excel(excel_segments_path, sheet_name_segment)
@@ -675,7 +689,7 @@ cell_range.Value = "Repas"
 for fichier in fichiers:
     # Iterate through each row in the column
     search_string = fichier.rsplit("\\", 1)[1].replace(".xlsx", date_folder)
-    segment_num = 0
+    segment_num = 1
     used_range = sheet.UsedRange
     for row_num in range(1, used_range.Rows.Count):
         cell_value = sheet.Cells(row_num, 20).Value
