@@ -6,8 +6,7 @@ from plotly.graph_objects import Figure, Scatter
 from tkinter import filedialog, Tk
 from scipy.signal import find_peaks, peak_prominences
 
-from openpyxl import load_workbook
-from openpyxl.styles import PatternFill
+import win32com.client
 
 from scipy.fft import fft
 
@@ -24,6 +23,11 @@ min_inactivity = 1
 min_peak = 0
 excel_all_path = r".\Resultats exp bag_couverts\Resultats exp bag_couverts\Tableau récapitulatif - new algo.xlsx"
 excel_segments_path = r".\Resultats exp bag_couverts\Resultats exp bag_couverts\durée_segments.xlsx"
+sheet_name = "Resultats_merged"
+sheet_name_segment = "Feuil1"
+noActivity_bgColor = 0xCDCDCC
+activityWithBite_bgColor = 0xEBBE45
+activityWithoutBite_bgColor = 0xCAECC7
 excel_titles = [
     "Duree_Totale",
     "Poids_Conso",
@@ -120,25 +124,6 @@ def extract_features(segment):
     return features
 
 
-
-def fill_cell(row_num, column, value, fills_ind):
-    global segment_num
-    cell = sheet_segments.cell(
-        row=row_num, column=column
-    )
-    cell.value = value
-    cell.fill = fills[fills_ind]
-    cell = sheet_segments.cell(
-        row=1, column=column
-    )
-    cell.value = f"Segment {segment_num}"
-    segment_num += 1
-    cell = sheet_segments.cell(
-        row=row_num, column=1
-    )
-    cell.value = f"{row_num - 1}"
-
-
 # Traitement des fichiers
 for fichier in fichiers:
     print(fichier)
@@ -229,6 +214,147 @@ for fichier in fichiers:
     # Filter closely spaced peaks and merge windows
     min_diff = 50  # Minimum difference in indices between consecutive peaks
 
+
+
+
+
+
+    # stop_the_bite = True
+    # allPeaksFound = True
+    # add_peak_update_next = True
+    # activity_time = 0
+    # final_peaks_indices = []
+    # merged_windows = []
+    # is_bite = []
+    # window_start, window_end = 0, 0
+    # Duree_activite_min = float("inf")
+    # Duree_activite_max = 0
+    # bouchees = 0
+    # i = 0
+    # while i < len(df):
+    #     if i + 1 < len(df) and df["Ptot"].iloc[j] < df["Ptot"].iloc[j - 1]:
+
+    #     if final_peaks_indices:
+    #         lastI = i == len(valid_peaks)
+    #         if stop_the_bite:
+    #             # increase the window to the left
+    #             exploring_horizontal = 5
+    #             for j in range(window_start, -1, -1):
+    #                 if df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]:
+    #                     exploring_horizontal -= 1
+    #                     if exploring_horizontal == 0:
+    #                         break
+    #                 else:
+    #                     exploring_horizontal = 5
+    #                     window_start = j - 1
+    #         upTo = len(df) - 1 if lastI else valid_peaks[i]
+    #         stop_the_bite = lastI or (upTo - final_peaks_indices[-1]) > min_diff
+    #         if stop_the_bite:
+    #             # increase the window to the right
+    #             exploring_horizontal = 5
+    #             for j in range(window_end, upTo):
+    #                 if df["Ptot"].iloc[j] == df["Ptot"].iloc[j + 1]:
+    #                     exploring_horizontal -= 1
+    #                     if exploring_horizontal == 0:
+    #                         break
+    #                 else:
+    #                     exploring_horizontal = 5
+    #                     window_end = j + 1
+    #                     if window_end == 997:
+    #                         print(5)
+    #             stop_the_bite = lastI or (upTo - window_end) > min_diff
+    #         if not stop_the_bite:
+    #             # cut into two bites if a long period of inactivity is found in the bite window
+    #             last_activity = window_end
+    #             for window_endi in range(window_end, upTo):
+    #                 if (
+    #                     df["Ptot"].iloc[window_endi]
+    #                     != df["Ptot"].iloc[window_endi + 1]
+    #                 ):
+    #                     if (
+    #                         df["time"].iloc[window_endi]
+    #                         - df["time"].iloc[last_activity]
+    #                         > min_inactivity
+    #                     ):
+    #                         stop_the_bite = True
+    #                         window_end = last_activity
+    #                         if window_end == 997:
+    #                             print(5)
+    #                         break
+    #                     last_activity = window_endi + 1
+    #         if stop_the_bite:
+    #             # if window_start == 738:
+    #             #     print(7)
+    #             merged_windows.append((window_start, window_end))
+    #             Duree_activity = (
+    #                 df["time"].iloc[window_end] - df["time"].iloc[window_start]
+    #             )
+    #             activity_time += Duree_activity
+    #             if Duree_activite_min > Duree_activity:
+    #                 Duree_activite_min = Duree_activity
+    #             if Duree_activite_max < Duree_activity:
+    #                 Duree_activite_max = Duree_activity
+    #             # check if the activity decreases the amount of food
+    #             is_bite.append(
+    #                 df["Ptot"].iloc[window_end] < df["Ptot"].iloc[window_start]
+    #             )
+    #             if is_bite[-1]:
+    #                 bouchees += 1
+    #                 # check if the food quantity has decreased before this bite
+    #                 if (
+    #                     len(merged_windows) > 1
+    #                     and df["Ptot"].iloc[window_start]
+    #                     != df["Ptot"].iloc[merged_windows[-2][1]]
+    #                     and 10):
+    #                     # go back to see where would be the missing bite
+    #                     # last_quantity = df["Ptot"].iloc[merged_windows[-2][1]]
+    #                     in_peak = False
+    #                     for j in range(merged_windows[-2][1] + 1, window_start):
+    #                         # if df["time"].iloc[j]>=390.95:
+    #                         #     print(5)
+    #                         if j>0 and df["Ptot"].iloc[j] > df["Ptot"].iloc[j - 1]:
+    #                             # if j == 719 or j == 722 or j == 723 or j == 725:
+    #                             #     print(7)
+    #                             valid_peaks = np.insert(valid_peaks, firstPeakAfterPrevAct, j)
+    #                             firstPeakAfterPrevAct += 1
+    #                             valid_prominences = np.insert(
+    #                                 valid_prominences, i - 1, 0
+    #                             )
+    #                             allPeaksFound = False
+    #                             i += 1
+    #             add_peak_update_next = not lastI
+    #             firstPeakAfterPrevAct = i
+    #         else:
+    #             # Merge peaks if they are close
+    #             window_end = valid_peaks[i]
+    #             if window_end == 997:
+    #                 print(5)
+    #             if (
+    #                 valid_prominences[i]
+    #                 > valid_prominences[
+    #                     np.where(valid_peaks == final_peaks_indices[-1])[0][0]
+    #                 ]
+    #             ):
+    #                 final_peaks_indices[-1] = valid_peaks[i]
+    #     if add_peak_update_next:
+    #         final_peaks_indices.append(valid_peaks[i])
+    #         window_start = valid_peaks[i]
+    #         window_end = valid_peaks[i]
+    #         if window_end == 997:
+    #             print(5)
+    #         add_peak_update_next = False
+    #     i += 1
+
+
+
+
+
+
+
+
+
+
+
     allPeaksFound = False
     while not allPeaksFound:
         stop_the_bite = True
@@ -242,8 +368,6 @@ for fichier in fichiers:
         Duree_activite_min = float("inf")
         Duree_activite_max = 0
         bouchees = 0
-        segments = []
-        fills_ind = []
         i = 0
         while i <= len(valid_peaks):
             if final_peaks_indices:
@@ -297,10 +421,6 @@ for fichier in fichiers:
                 if stop_the_bite:
                     # if window_start == 738:
                     #     print(7)
-                    if len(merged_windows):
-                        segments.append(window_start - merged_windows[-1])
-                        fills_ind.append(2)
-                    segments.append(window_start - merged_windows[-1])
                     merged_windows.append((window_start, window_end))
                     Duree_activity = (
                         df["time"].iloc[window_end] - df["time"].iloc[window_start]
@@ -314,7 +434,6 @@ for fichier in fichiers:
                     is_bite.append(
                         df["Ptot"].iloc[window_end] < df["Ptot"].iloc[window_start]
                     )
-                    fills_ind.append(int(is_bite[-1]))
                     if is_bite[-1]:
                         bouchees += 1
                         # check if the food quantity has decreased before this bite
@@ -428,7 +547,14 @@ for fichier in fichiers:
     new_excel[fichier]["Poids_Conso"] = poids_consome
     new_excel[fichier]["Duree_Totale"] = temps_repas
 
+    # storing the duration of each action
     segments = []
+    for index, window in enumerate(merged_windows, start=1):
+        segments.append([window[1] - window[0], int(is_bite[index])])
+        if index + 1 <len(merged_windows):
+            diff = merged_windows[index + 1][0] - merged_windows[index][1]
+            if diff:
+                segments.append([window[1] - window[0], 2])
     new_excel[fichier]["segments"] = segments
 
     # Création de graphiques avec Plotly
@@ -521,49 +647,67 @@ for fichier in fichiers:
     features_df.to_csv("bite_features.csv", index=False)
 
 
-# Open an existing workbook
-workbook = load_workbook(excel_all_path)
 
-# Select the active worksheet (you can also select a specific sheet by name)
-sheet = workbook.active
 
-# Open an existing workbook
-workbook_segments = load_workbook(excel_segments_path)
 
-# Select the active worksheet (you can also select a specific sheet by name)
-sheet_segments = workbook_segments.active
+def open_excel(file_path, sheet_name):
+    excel = win32com.client.Dispatch("Excel.Application")
+    excel.Visible = True
 
-fills = []
-fills.append(PatternFill(start_color='00FF00', end_color='00FF00', fill_type='solid'))
-fills.append(PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid'))
-fills.append(PatternFill(start_color='A0A0A0', end_color='A0A0A0', fill_type='solid'))
+    # Open the workbook (or attach to it if it's already open)
+    try:
+        workbook = excel.Workbooks.Open(file_path)
+    except:
+        workbook = excel.Workbooks(file_path.split("\\")[-1])
 
+    # Access the specified worksheet
+    sheet = workbook.Sheets(sheet_name)
+    return workbook, sheet
+
+fills = [activityWithoutBite_bgColor, activityWithBite_bgColor, noActivity_bgColor]
+
+workbook, sheet = open_excel(excel_all_path, sheet_name)
+workbook_segments, sheet_segments = open_excel(excel_segments_path, sheet_name_segment)
         
-cell = sheet_segments.cell(
-    row=1, column=1
-)
-cell.value = "Repas"
+cell_range = sheet_segments.Cells(1, 1)
+cell_range.Value = "Repas"
 
 for fichier in fichiers:
     # Iterate through each row in the column
     search_string = fichier.rsplit("\\", 1)[1].replace(".xlsx", date_folder)
     segment_num = 0
-    for row_num in range(1, sheet.max_row + 1):
-        cell_value = sheet[f"T{row_num}"].value
+    used_range = sheet.UsedRange
+    for row_num in range(1, used_range.Rows.Count):
+        cell_value = sheet.Cells(row_num, 20).Value
         if cell_value == search_string:
             for index, key in enumerate(excel_titles, start=11):
-                cell = sheet.cell(
-                    row=row_num, column=index
-                )
-                cell.value = new_excel[fichier][key]
-            for index, window in enumerate(merged_windows, start=1):
-                fill_cell(row_num, index * 2, window[1] - window[0], int(is_bite[index]))
-                if index + 1 <len(new_excel[fichier]["merged_windows"]):
-                    fill_cell(row_num, index * 2 + 1, new_excel[fichier]["merged_windows"][index + 1][0] - new_excel[fichier]["merged_windows"][index][1], 2)
+                # Edit the specified cell
+                cell_range = sheet.Cells(row_num, index)
+                cell_range.Value = new_excel[fichier][key]
+            for index, window in enumerate(new_excel[fichier]["segments"], start=2):
+                cell_range = sheet_segments.Cells(row_num, index)
+                cell_range.Value = window[0]
+
+                # Change the background color
+                cell_range.Interior.Color = fills[window[1]]
+
+                # Set the border style
+                # Constants for border styles: https://docs.microsoft.com/en-us/office/vba/api/excel.xllinestyle
+                xlEdgeLeft = 7
+                xlEdgeTop = 8
+                xlEdgeBottom = 9
+                xlEdgeRight = 10
+
+                borders = [xlEdgeLeft, xlEdgeTop, xlEdgeBottom, xlEdgeRight]
+                for border in borders:
+                    cell_range.Borders(border).LineStyle = 1
+
+                cell_range = sheet_segments.Cells(1, index)
+                cell_range.Value = f"Segment {segment_num}"
+                segment_num+=1
+                cell_range = sheet_segments.Cells(row_num, 1)
+                cell_range.Value = f"{row_num - 1}"
             break
     
-
-# Save the changes to the workbook
-workbook.save(excel_all_path)
-# Save the changes to the workbook
-workbook_segments.save(excel_segments_path)
+workbook.Save()
+workbook_segments.Save()
