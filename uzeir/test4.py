@@ -48,6 +48,7 @@ root.withdraw()
 
 dossier = r".\Resultats exp bag_couverts\Resultats exp bag_couverts\27_05_24_xlsx"
 # dossier = r".\data_du_bureau\xlsx"
+# dossier = r".\filtered_data"
 
 dossier_graphique = r".\Resultats exp bag_couverts\Resultats exp bag_couverts\27_05_24_graph"
 
@@ -55,7 +56,7 @@ date_folder = "_27_05_24"
 
 fichiers = []
 for f in os.listdir(dossier):
-    if f.endswith(".xlsx") and (f == "4Plateaux-P1-bag.xlsx" or 0):
+    if f.endswith(".xlsx") and (0 or f == "4Plateaux-P2-bag.xlsx"):
         fichiers.append(os.path.join(dossier, f))
 
 
@@ -137,29 +138,29 @@ for fichier in fichiers:
     df["time"] = df["time"] / 1000
 
     # Filter smoothing time
-    indices_time = [df.index[0]]
+    filtered_df = df.copy()
+    indices_time = [filtered_df.index[0]]
 
-    for i in range(1, len(df)):
-        if df["time"].iloc[i] - df["time"].iloc[indices_time[-1]] >= int_time:
+    for i in range(1, len(filtered_df)):
+        if filtered_df["time"].iloc[i] - filtered_df["time"].iloc[indices_time[-1]] >= int_time:
             indices_time.append(i)
 
-    df = df.iloc[indices_time].reset_index(drop=True)
+    filtered_df = filtered_df.iloc[indices_time].reset_index(drop=True)
 
-    if df.empty:
+    if filtered_df.empty:
         continue  # Skip further processing if no data remains after filtering
 
     # Filter smoothing weight
-    filtered_df = df.copy()
     i = 0
 
-    while i < len(df) - 1:
+    while i < len(filtered_df) - 1:
         val_ini = filtered_df["Ptot"].iloc[i]
         j = i + 1
 
-        while j < len(df) and np.abs(df["Ptot"].iloc[j] - val_ini) < seuil_poids:
+        while j < len(filtered_df) and np.abs(filtered_df["Ptot"].iloc[j] - val_ini) < seuil_poids:
             j += 1
 
-        if j <= len(df):
+        if j <= len(filtered_df):
             filtered_df.loc[i : j - 1, "Ptot"] = val_ini
         i = j
 
@@ -433,54 +434,59 @@ for fichier in fichiers:
                     if Duree_activite_max < Duree_activity:
                         Duree_activite_max = Duree_activity
                     # check if the activity decreases the amount of food
-                    is_bite.append(
-                        df["Ptot"].iloc[window_end] < df["Ptot"].iloc[window_start]
-                    )
-                    if is_bite[-1]:
-                        bouchees += 1
-                        # check if the food quantity has decreased before this bite
-                        if (
-                            len(merged_windows) > 1
-                            and df["Ptot"].iloc[window_start]
-                            != df["Ptot"].iloc[merged_windows[-2][1]]
-                         and 10):
-                            # go back to see where would be the missing bite
-                            # last_quantity = df["Ptot"].iloc[merged_windows[-2][1]]
-                            in_peak = False
-                            for j in range(merged_windows[-2][1] + 1, window_start):
-                                # if df["time"].iloc[j]>=390.95:
-                                #     print(5)
-                                if j>0 and df["Ptot"].iloc[j] != df["Ptot"].iloc[j - 1]:
-                                    # if j == 719 or j == 722 or j == 723 or j == 725:
-                                    #     print(7)
-                                    valid_peaks = np.insert(valid_peaks, firstPeakAfterPrevAct, j)
-                                    firstPeakAfterPrevAct += 1
-                                    valid_prominences = np.insert(
-                                        valid_prominences, i - 1, 0
-                                    )
-                                    allPeaksFound = False
-                                    i += 1
-                                # if df["Ptot"].iloc[j] > last_quantity + min_peak:
-                                #     valid_peaks = np.insert(valid_peaks, i - 1, j)
-                                #     valid_prominences = np.insert(
-                                #         valid_prominences, i - 1, 0
-                                #     )
-                                #     allPeaksFound = False
-                                #     i += 1
-                                #     in_peak = True
-                                #     exploring_horizontal = 5
-                                # elif (
-                                #     not in_peak
-                                #     and df["Ptot"].iloc[j] < last_quantity
-                                #     and j > 0
-                                #     and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]
-                                # ):
-                                #     last_quantity = df["Ptot"].iloc[j]
-                                # elif j>0 and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]:
-                                #     if exploring_horizontal == 0:
-                                #         last_quantity = df["Ptot"].iloc[j]
-                                #     exploring_horizontal-=1
-                                #     in_peak = False
+                    diff = df["Ptot"].iloc[window_end] - df["Ptot"].iloc[window_start]
+                    if diff < 0:
+                        for index, prev_diff in enumerate(is_bite):
+                            if abs(prev_diff + diff) < prev_diff / 14:
+                                diff = 0
+                                is_bite[index] = 0
+                                break
+                        if diff:
+                            bouchees += 1
+                            # check if the food quantity has decreased before this bite
+                            if (
+                                len(merged_windows) > 1
+                                and df["Ptot"].iloc[window_start]
+                                != df["Ptot"].iloc[merged_windows[-2][1]]
+                                and 10):
+                                # go back to see where would be the missing bite
+                                # last_quantity = df["Ptot"].iloc[merged_windows[-2][1]]
+                                in_peak = False
+                                for j in range(merged_windows[-2][1] + 1, window_start):
+                                    # if df["time"].iloc[j]>=390.95:
+                                    #     print(5)
+                                    if j>0 and df["Ptot"].iloc[j] != df["Ptot"].iloc[j - 1]:
+                                        # if j == 719 or j == 722 or j == 723 or j == 725:
+                                        #     print(7)
+                                        valid_peaks = np.insert(valid_peaks, firstPeakAfterPrevAct, j)
+                                        firstPeakAfterPrevAct += 1
+                                        valid_prominences = np.insert(
+                                            valid_prominences, i - 1, 0
+                                        )
+                                        allPeaksFound = False
+                                        i += 1
+                                    # if df["Ptot"].iloc[j] > last_quantity + min_peak:
+                                    #     valid_peaks = np.insert(valid_peaks, i - 1, j)
+                                    #     valid_prominences = np.insert(
+                                    #         valid_prominences, i - 1, 0
+                                    #     )
+                                    #     allPeaksFound = False
+                                    #     i += 1
+                                    #     in_peak = True
+                                    #     exploring_horizontal = 5
+                                    # elif (
+                                    #     not in_peak
+                                    #     and df["Ptot"].iloc[j] < last_quantity
+                                    #     and j > 0
+                                    #     and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]
+                                    # ):
+                                    #     last_quantity = df["Ptot"].iloc[j]
+                                    # elif j>0 and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]:
+                                    #     if exploring_horizontal == 0:
+                                    #         last_quantity = df["Ptot"].iloc[j]
+                                    #     exploring_horizontal-=1
+                                    #     in_peak = False
+                    is_bite.append(diff)
                     add_peak_update_next = not lastI
                     firstPeakAfterPrevAct = i
                 else:
@@ -555,7 +561,7 @@ for fichier in fichiers:
     # storing the duration of each action
     segments = []
     for index, window in enumerate(merged_windows):
-        segments.append([df["time"].iloc[window[1]] - df["time"].iloc[window[0]], int(is_bite[index])])
+        segments.append([df["time"].iloc[window[1]] - df["time"].iloc[window[0]], is_bite[index]])
         if index + 1 < len(merged_windows):
             diff = df["time"].iloc[merged_windows[index + 1][0]] - df["time"].iloc[window[1]]
             if diff:
@@ -586,7 +592,7 @@ for fichier in fichiers:
         #     and df["Ptot"].iloc[end_idx + 1] < df["Ptot"].iloc[end_idx]
         # ):
         #     end_idx += 1
-        color = "Red" if is_bite[index] else "Gray"
+        color = "Red" if is_bite[index] < 0 else "Gray"
         fig.add_shape(
             type="rect",
             x0=df["time"].iloc[start_idx],
@@ -680,48 +686,52 @@ def rgb_to_bgr(rgb_color):
 fills = [rgb_to_bgr(color) for color in [activityWithoutBite_bgColor, activityWithBite_bgColor, noActivity_bgColor]]
 
 
-workbook, sheet = open_excel(excel_all_path, sheet_name)
-workbook_segments, sheet_segments = open_excel(excel_segments_path, sheet_name_segment)
+def update_excel():
+
+    workbook, sheet = open_excel(excel_all_path, sheet_name)
+    workbook_segments, sheet_segments = open_excel(excel_segments_path, sheet_name_segment)
+            
+    cell_range = sheet_segments.Cells(1, 1)
+    cell_range.Value = "Repas"
+
+    for fichier in fichiers:
+        # Iterate through each row in the column
+        search_string = fichier.rsplit("\\", 1)[1].replace(".xlsx", date_folder)
+        segment_num = 1
+        used_range = sheet.UsedRange
+        for row_num in range(1, used_range.Rows.Count):
+            cell_value = sheet.Cells(row_num, 20).Value
+            if cell_value == search_string:
+                for index, key in enumerate(excel_titles, start=11):
+                    # Edit the specified cell
+                    cell_range = sheet.Cells(row_num, index)
+                    cell_range.Value = new_excel[fichier][key]
+                for index, window in enumerate(new_excel[fichier]["segments"], start=2):
+                    cell_range = sheet_segments.Cells(row_num, index)
+                    cell_range.Value = window[0]
+
+                    # Change the background color
+                    cell_range.Interior.Color = fills[int(window[1] < 0)]
+
+                    # Set the border style
+                    # Constants for border styles: https://docs.microsoft.com/en-us/office/vba/api/excel.xllinestyle
+                    xlEdgeLeft = 7
+                    xlEdgeTop = 8
+                    xlEdgeBottom = 9
+                    xlEdgeRight = 10
+
+                    borders = [xlEdgeLeft, xlEdgeTop, xlEdgeBottom, xlEdgeRight]
+                    for border in borders:
+                        cell_range.Borders(border).LineStyle = 1
+
+                    cell_range = sheet_segments.Cells(1, index)
+                    cell_range.Value = f"Segment {segment_num}"
+                    segment_num+=1
+                    cell_range = sheet_segments.Cells(row_num, 1)
+                    cell_range.Value = f"{row_num - 1}"
+                break
         
-cell_range = sheet_segments.Cells(1, 1)
-cell_range.Value = "Repas"
+    workbook.Save()
+    workbook_segments.Save()
 
-for fichier in fichiers:
-    # Iterate through each row in the column
-    search_string = fichier.rsplit("\\", 1)[1].replace(".xlsx", date_folder)
-    segment_num = 1
-    used_range = sheet.UsedRange
-    for row_num in range(1, used_range.Rows.Count):
-        cell_value = sheet.Cells(row_num, 20).Value
-        if cell_value == search_string:
-            for index, key in enumerate(excel_titles, start=11):
-                # Edit the specified cell
-                cell_range = sheet.Cells(row_num, index)
-                cell_range.Value = new_excel[fichier][key]
-            for index, window in enumerate(new_excel[fichier]["segments"], start=2):
-                cell_range = sheet_segments.Cells(row_num, index)
-                cell_range.Value = window[0]
-
-                # Change the background color
-                cell_range.Interior.Color = fills[window[1]]
-
-                # Set the border style
-                # Constants for border styles: https://docs.microsoft.com/en-us/office/vba/api/excel.xllinestyle
-                xlEdgeLeft = 7
-                xlEdgeTop = 8
-                xlEdgeBottom = 9
-                xlEdgeRight = 10
-
-                borders = [xlEdgeLeft, xlEdgeTop, xlEdgeBottom, xlEdgeRight]
-                for border in borders:
-                    cell_range.Borders(border).LineStyle = 1
-
-                cell_range = sheet_segments.Cells(1, index)
-                cell_range.Value = f"Segment {segment_num}"
-                segment_num+=1
-                cell_range = sheet_segments.Cells(row_num, 1)
-                cell_range.Value = f"{row_num - 1}"
-            break
-    
-workbook.Save()
-workbook_segments.Save()
+update_excel()
