@@ -21,6 +21,7 @@ indice_fin = 0
 int_time = 0.2
 seuil_poids = 4
 min_bite_duration = 1  # Minimum bite duration in seconds
+min_bite_weight = 4
 min_inactivity = 1
 min_peak = 0
 excel_all_path = r".\Resultats exp bag_couverts\Resultats exp bag_couverts\Tableau récapitulatif - new algo.xlsx"
@@ -46,17 +47,17 @@ excel_titles = [
 root = Tk()
 root.withdraw()
 
-dossier = r".\Resultats exp bag_couverts\Resultats exp bag_couverts\27_05_24_xlsx"
+dossier = r".\Resultats exp bag_couverts\Resultats exp bag_couverts\28_05_24_xlsx"
 # dossier = r".\data_du_bureau\xlsx"
 # dossier = r".\filtered_data"
 
-dossier_graphique = r".\Resultats exp bag_couverts\Resultats exp bag_couverts\27_05_24_graph"
+dossier_graphique = r".\Resultats exp bag_couverts\Resultats exp bag_couverts\28_05_24_graph"
 
-date_folder = "_27_05_24"
+date_folder = "_28_05_24"
 
 fichiers = []
 for f in os.listdir(dossier):
-    if f.endswith(".xlsx") and (10 or f == "4Plateaux-P2-other.xlsx"):
+    if f.endswith(".xlsx") and (10 or f == "4Plateaux-P2-bag.xlsx"):
         fichiers.append(os.path.join(dossier, f))
 
 
