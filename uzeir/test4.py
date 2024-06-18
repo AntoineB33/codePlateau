@@ -56,7 +56,7 @@ date_folder = "_27_05_24"
 
 fichiers = []
 for f in os.listdir(dossier):
-    if f.endswith(".xlsx") and (0 or f == "4Plateaux-P2-bag.xlsx"):
+    if f.endswith(".xlsx") and (10 or f == "4Plateaux-P2-other.xlsx"):
         fichiers.append(os.path.join(dossier, f))
 
 
@@ -173,7 +173,7 @@ for fichier in fichiers:
 
     # Peak detection
     peaks, _ = find_peaks(
-        df["Ptot"], height=100, distance=5
+        df["Ptot"], height=100, distance=1
     )  # Reduced distance for more sensitivity
     prominences = peak_prominences(df["Ptot"], peaks)[0]
 
@@ -521,10 +521,10 @@ for fichier in fichiers:
 
     if bouchees:
         debut_ind = 0
-        while not is_bite[debut_ind]:
+        while 0 <= is_bite[debut_ind]:
             debut_ind += 1
         fin_ind = len(is_bite)
-        while fin_ind > 0 and not is_bite[fin_ind - 1]:
+        while fin_ind > 0 and 0 <= is_bite[fin_ind - 1]:
             fin_ind -= 1
         merged_windows = merged_windows[debut_ind:fin_ind]
         final_peaks_indices = final_peaks_indices[debut_ind:fin_ind]
@@ -561,7 +561,7 @@ for fichier in fichiers:
     # storing the duration of each action
     segments = []
     for index, window in enumerate(merged_windows):
-        segments.append([df["time"].iloc[window[1]] - df["time"].iloc[window[0]], is_bite[index]])
+        segments.append([df["time"].iloc[window[1]] - df["time"].iloc[window[0]], int(is_bite[index] < 0)])
         if index + 1 < len(merged_windows):
             diff = df["time"].iloc[merged_windows[index + 1][0]] - df["time"].iloc[window[1]]
             if diff:
@@ -658,35 +658,30 @@ for fichier in fichiers:
     features_df.to_csv("bite_features.csv", index=False)
 
 
-
-
-
-def open_excel(file_path, sheet_name):
-    excel = win32com.client.Dispatch("Excel.Application")
-    excel.Visible = True
-
-    file_path = os.path.abspath(file_path)
-    # Open the workbook (or attach to it if it's already open)
-    try:
-        workbook = excel.Workbooks.Open(file_path)
-    except:
-        workbook = excel.Workbooks(file_path.split("\\")[-1])
-
-    # Access the specified worksheet
-    sheet = workbook.Sheets(sheet_name)
-    return workbook, sheet
-
-def rgb_to_bgr(rgb_color):
-    red = (rgb_color >> 16) & 0xFF
-    green = (rgb_color >> 8) & 0xFF
-    blue = rgb_color & 0xFF
-    bgr_color = (blue << 16) | (green << 8) | red
-    return bgr_color
-
-fills = [rgb_to_bgr(color) for color in [activityWithoutBite_bgColor, activityWithBite_bgColor, noActivity_bgColor]]
-
-
 def update_excel():
+    def open_excel(file_path, sheet_name):
+        excel = win32com.client.Dispatch("Excel.Application")
+        # excel.Visible = True
+
+        file_path = os.path.abspath(file_path)
+        # Open the workbook (or attach to it if it's already open)
+        try:
+            workbook = excel.Workbooks.Open(file_path)
+        except:
+            workbook = excel.Workbooks(file_path.split("\\")[-1])
+
+        # Access the specified worksheet
+        sheet = workbook.Sheets(sheet_name)
+        return workbook, sheet
+
+    def rgb_to_bgr(rgb_color):
+        red = (rgb_color >> 16) & 0xFF
+        green = (rgb_color >> 8) & 0xFF
+        blue = rgb_color & 0xFF
+        bgr_color = (blue << 16) | (green << 8) | red
+        return bgr_color
+
+    fills = [rgb_to_bgr(color) for color in [activityWithoutBite_bgColor, activityWithBite_bgColor, noActivity_bgColor]]
 
     workbook, sheet = open_excel(excel_all_path, sheet_name)
     workbook_segments, sheet_segments = open_excel(excel_segments_path, sheet_name_segment)
@@ -708,10 +703,10 @@ def update_excel():
                     cell_range.Value = new_excel[fichier][key]
                 for index, window in enumerate(new_excel[fichier]["segments"], start=2):
                     cell_range = sheet_segments.Cells(row_num, index)
-                    cell_range.Value = window[0]
+                    cell_range.Value = round(window[0], 1)
 
                     # Change the background color
-                    cell_range.Interior.Color = fills[int(window[1] < 0)]
+                    cell_range.Interior.Color = fills[window[1]]
 
                     # Set the border style
                     # Constants for border styles: https://docs.microsoft.com/en-us/office/vba/api/excel.xllinestyle
