@@ -12,6 +12,8 @@ import win32api
 from scipy.fft import fft
 
 import os
+import openpyxl
+import xlwings as xw
 
 """"///////////////////Variables globales///////////////////"""
 poids_min = float("inf")
@@ -163,21 +165,21 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
         )
 
         return features
-
-    fichier_names=[]
-    y = []
+    
+    fichier_names = []
     for fichier in fichiers:
         fichier_names.append(os.path.basename(fichier).split(".")[0])
 
     # Traitement des fichiers
     for fileInd, fichier in enumerate(fichier_names):
         print(fichier)
-        df = pd.read_excel(fichier, usecols=[0, 1])
+        df = pd.read_excel(fichiers[fileInd], usecols=[0, 1])
         df.columns = ["time", "Ptot"]
+        df["time"] = df["time"] / 1000
+        df0 = df.copy()
         df = df[df["Ptot"] > 100]
         # df["Ptot"] = np.abs(df["Ptot"])
         # df = df[df["Ptot"] < 3000]
-        df["time"] = df["time"] / 1000
 
         # Filter smoothing time
         filtered_df = df.copy()
@@ -274,6 +276,7 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
             final_peaks_indices = []
             merged_windows = []
             is_bite = []
+            associatedWith = []
             window_start, window_end = 0, 0
             Duree_activite_min = float("inf")
             Duree_activite_max = 0
@@ -329,8 +332,12 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
                                     break
                                 last_activity = window_endi + 1
                     if stop_the_bite:
-                        # if window_start == 738:
-                        #     print(7)
+                        if window_start == 0 and df0["time"].iloc[0]!=df["time"].iloc[0]:
+                            del final_peaks_indices[0]
+                            continue
+                        elif window_end == len(df)-1 and df0["time"].iloc[len(df0) - 1]!=df["time"].iloc[len(df)-1]:
+                            del final_peaks_indices[-1]
+                            break
                         merged_windows.append((window_start, window_end))
                         Duree_activity = (
                             df["time"].iloc[window_end] - df["time"].iloc[window_start]
@@ -342,11 +349,13 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
                             Duree_activite_max = Duree_activity
                         # check if the activity decreases the amount of food
                         diff = df["Ptot"].iloc[window_end] - df["Ptot"].iloc[window_start]
+                        associatedWith.append(-1)
                         if diff <= -min_bite_weight:
                             for index, prev_diff in enumerate(is_bite):
                                 if abs(prev_diff + diff) < prev_diff / 20 + 1:
                                     diff = 0
                                     is_bite[index] = 0
+                                    associatedWith[-1] = index
                                     break
                             if diff:
                                 bouchees += 1
@@ -504,6 +513,21 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
                 fillcolor=color,
                 opacity=0.2,
             )
+            if associatedWith[index] != -1:
+                decalageVert = 200
+                yPos = df["Ptot"].iloc[start_idx:end_idx].max() + decalageVert
+                if yPos > df["Ptot"].max():
+                    yPos = df["Ptot"].iloc[start_idx:end_idx].min() - decalageVert
+                # Add the text annotation
+                fig.add_annotation(
+                    x=df["time"].iloc[(start_idx + end_idx) // 2],
+                    y=yPos,
+                    text=f"associated with action<br>starting at {df['time'].iloc[merged_windows[associatedWith[index]][0]]}",
+                    showarrow=False,
+                    font=dict(color="black", size=12),
+                    bgcolor="white",
+                    opacity=0.8,
+                )
 
         fig.add_trace(
             Scatter(
@@ -563,23 +587,41 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
         fichier_names_rows = [name + date_folder for name in fichier_names]
         def open_excel(file_path, sheet_name):
 
-            if not os.path.exists(file_path):
-                # Create a DataFrame for the column 'T'
-                df_data = pd.DataFrame({'T': fichier_names})
-                
-                # Create a DataFrame for the headers
-                df_headers = pd.DataFrame([""]*10 + [excel_titles])
-                
-                # Concatenate the headers and the data
-                df = pd.concat([df_headers, df_data], ignore_index=True)
-                
-                # Write the DataFrame to an Excel file
-                df.to_excel(file_path, sheet_name=sheet_name, header=False, index=False)
-                print(f"Excel file created and data written to {file_path}.")
-            else:
-                print(f"Excel file {file_path} already exists.")
+            # xlsm_file_path = file_path + ".xlsm"
+            # xlsx_file_path = file_path + ".xlsx"
+            # if os.path.exists(xlsm_file_path):
+            #     print(f"{xlsm_file_path} already exists. No action taken.")
+            # elif os.path.exists(xlsx_file_path):
+            #     # Load the .xlsx file
+            #     workbook = openpyxl.load_workbook(xlsx_file_path)
+            #     # Save the workbook as an .xlsm file
+            #     workbook.save(xlsm_file_path)
+            #     print(f"Transformed {xlsx_file_path} to {xlsm_file_path}.")
+            # else:
+            #     # Create a new .xlsm file
+            #     workbook = openpyxl.Workbook()
+            #     workbook.save(xlsm_file_path)
+            #     print(f"Created new file {xlsm_file_path}.")
+
+            # # Add VBA code to the .xlsm file and execute it
+            # with xw.App(visible=True) as app:
+            #     wb = app.books.open(xlsm_file_path)
+            #     vba_module = wb.api.VBProject.VBComponents.Add(1)  # 1 = Module
+            #     vba_code = """
+            #     Sub WriteData()
+            #         Dim ws As Worksheet
+            #         Set ws = ThisWorkbook.Sheets(1)
+            #         ws.Cells(1, 1).Value = "Hello"
+            #         ws.Cells(2, 1).Value = "World"
+            #     End Sub
+            #     """
+            #     vba_module.CodeModule.AddFromString(vba_code)
+            #     wb.save()
+            #     wb.macro('WriteData')()  # Run the VBA macro
+            #     wb.save()
+            #     wb.close()
         
-        
+            file_path = file_path + ".xlsx"
             excel = win32com.client.Dispatch("Excel.Application")
             # excel.Visible = True
 
@@ -616,7 +658,7 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
             for row_num in range(1, used_range.Rows.Count):
                 cell_value = sheet.Cells(row_num, 20).Value
                 if cell_value == fichier:
-                    for index, key in enumerate(map(lambda x: x.replace('_',' '), excel_titles[:9]), start=11):
+                    for index, key in enumerate(excel_titles[:9], start=11):
                         # Edit the specified cell
                         cell_range = sheet.Cells(row_num, index)
                         cell_range.Value = new_excel[fichier_names[fileInd]][key]
@@ -651,8 +693,8 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
     update_excel()
 
 
-excel_all_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\Tableau récapitulatif - new algo.xlsx"
-excel_segments_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\durée_segments.xlsx"
+excel_all_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\Tableau récapitulatif - new algo"
+excel_segments_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\durée_segments"
 sheet_name = "Resultats_merged"
 sheet_name_segment = "Feuil1"
 
@@ -665,7 +707,7 @@ dossier_graphique = r".\data\Resultats exp bag_couverts\Resultats exp bag_couver
 
 date_folder = "_27_05_24"
 
-find_bites(dossier, dossier_graphique, date_folder,"2Plateaux-P1-couv.xlsx")
+# find_bites(dossier, dossier_graphique, date_folder,"2Plateaux-P1-couv")
 # find_bites(dossier, dossier_graphique, date_folder)
 
 dossier = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\28_05_24_xlsx"
@@ -690,8 +732,8 @@ date_folder = "_28_05_24"
 
 
 
-excel_all_path = r".\data\benjamin_2_csv\Tableau récapitulatif - new algo.xlsx"
-excel_segments_path = r".\data\benjamin_2_csv\durée_segments.xlsx"
+excel_all_path = r".\data\benjamin_2_csv\Tableau récapitulatif - new algo"
+excel_segments_path = r".\data\benjamin_2_csv\durée_segments"
 sheet_name = "Resultats_merged"
 sheet_name_segment = "Feuil1"
 
@@ -706,4 +748,4 @@ date_folder = ""
 
 # convert_csv_to_xlsx(r".\data\benjamin_2_csv\csv", dossier)
 
-# find_bites(dossier, dossier_graphique, date_folder)
+find_bites(dossier, dossier_graphique, date_folder)
