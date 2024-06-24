@@ -15,6 +15,8 @@ import os
 import openpyxl
 import xlwings as xw
 
+import matplotlib.pyplot as plt
+
 """"///////////////////Variables globales///////////////////"""
 poids_min = float("inf")
 debut_ind = 0
@@ -24,7 +26,7 @@ indice_fin = 0
 int_time = 0.2
 plate_weight_min = 100
 min_bite_duration = 1  # Minimum bite duration in seconds
-min_bite_weight = 4
+min_bite_weight = 2
 min_inactivity = 1
 min_peak = 0
 min_plate_weight = 700
@@ -45,10 +47,69 @@ excel_titles = [
     "Ustensile"
 ]
 fichier_names=[]
+dataToExcel = []
 """/////////////////////////////////////////////////////////"""
 
+import os
+import pandas as pd
 
 def convert_csv_to_xlsx(folder_path, xlsx_folder_path=""):
+    # List all files in the given folder
+    files = [file for file in os.listdir(folder_path) if file.endswith(".csv") or file.endswith(".CSV")]
+
+    # Process each file
+    for file in files:
+        # Construct full file path
+        file_path = os.path.join(folder_path, file)
+
+        # Read the CSV file content
+        with open(file_path, "r", encoding="ISO-8859-1") as f:
+            lines = f.readlines()
+
+        data = "".join(lines)
+            
+        # # Check if the first line contains only integers
+        # first_line = lines[0].strip()
+        # if all(item.isdigit() for item in first_line.split(",")):
+        #     # If the first line contains only integers, do not skip it
+        #     data = "".join(lines)
+        # else:
+        #     # If the first line contains non-integer values, skip it
+        #     data = "".join(lines[1:])
+
+        # Replace semicolons with commas in the data
+        if "," not in data:
+            data = data.replace(";", ",")
+            with open(file_path, "w", encoding="ISO-8859-1") as f:
+                f.write(data)
+
+        # Read the CSV file into a DataFrame
+        df = pd.read_csv(file_path, encoding="ISO-8859-1")
+
+        # Ensure the output folder path exists
+        if not xlsx_folder_path:
+            xlsx_folder_path = folder_path
+        if not os.path.exists(xlsx_folder_path):
+            os.makedirs(xlsx_folder_path)
+
+        # Process each column against the first column as abscissa
+        for col in df.columns[1:]:
+            if not df[col].isnull().all():  # Ensure the column is not empty
+                new_df = df[[df.columns[0], col]]
+
+                # Create a new Excel file path
+                new_file_path = os.path.join(
+                    xlsx_folder_path, 
+                    f"{os.path.splitext(file)[0]}_{col}.xlsx"
+                )
+
+                # Write data to an Excel file
+                new_df.to_excel(new_file_path, index=False)
+                # print(f"Converted '{file}' column '{col}' to '{new_file_path}'")
+
+
+
+def convert_csv_to_xlsx0(folder_path, xlsx_folder_path=""):
     # List all files in the given folder
     files = [file for file in os.listdir(folder_path) if file.endswith(".csv") or file.endswith(".CSV")]
 
@@ -177,13 +238,14 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
         df.columns = ["time", "Ptot"]
         df["time"] = df["time"] / 1000
         df0 = df.copy()
-        df = df[df["Ptot"] > 100]
+        df = df[df["Ptot"] > 10]
+
         # df["Ptot"] = np.abs(df["Ptot"])
         # df = df[df["Ptot"] < 3000]
 
         # Filter smoothing time
         filtered_df = df.copy()
-        indices_time = [filtered_df.index[0]]
+        indices_time = [0]
 
         for i in range(1, len(filtered_df)):
             if filtered_df["time"].iloc[i] - filtered_df["time"].iloc[indices_time[-1]] >= int_time:
@@ -309,8 +371,6 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
                             else:
                                 exploring_horizontal = 5
                                 window_end = j + 1
-                                if window_end == 997:
-                                    print(5)
                         stop_the_bite = lastI or (upTo - window_end) > min_diff
                     if not stop_the_bite:
                         # cut into two bites if a long period of inactivity is found in the bite window
@@ -327,85 +387,83 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
                                 ):
                                     stop_the_bite = True
                                     window_end = last_activity
-                                    if window_end == 997:
-                                        print(5)
                                     break
                                 last_activity = window_endi + 1
                     if stop_the_bite:
                         if window_start == 0 and df0["time"].iloc[0]!=df["time"].iloc[0]:
                             del final_peaks_indices[0]
-                            continue
-                        elif window_end == len(df)-1 and df0["time"].iloc[len(df0) - 1]!=df["time"].iloc[len(df)-1]:
-                            del final_peaks_indices[-1]
-                            break
-                        merged_windows.append((window_start, window_end))
-                        Duree_activity = (
-                            df["time"].iloc[window_end] - df["time"].iloc[window_start]
-                        )
-                        activity_time += Duree_activity
-                        if Duree_activite_min > Duree_activity:
-                            Duree_activite_min = Duree_activity
-                        if Duree_activite_max < Duree_activity:
-                            Duree_activite_max = Duree_activity
-                        # check if the activity decreases the amount of food
-                        diff = df["Ptot"].iloc[window_end] - df["Ptot"].iloc[window_start]
-                        associatedWith.append(-1)
-                        if diff <= -min_bite_weight:
-                            for index, prev_diff in enumerate(is_bite):
-                                if abs(prev_diff + diff) < prev_diff / 20 + 1:
-                                    diff = 0
-                                    is_bite[index] = 0
-                                    associatedWith[-1] = index
-                                    break
-                            if diff:
-                                bouchees += 1
-                                fin_ind = len(merged_windows)
-                        # check if the food quantity has decreased before this bite
-                        if (
-                            len(merged_windows) > 1
-                            and df["Ptot"].iloc[window_start]
-                            != df["Ptot"].iloc[merged_windows[-2][1]]
-                            and 10):
-                            # go back to see where would be the missing bite
-                            # last_quantity = df["Ptot"].iloc[merged_windows[-2][1]]
-                            in_peak = False
-                            for j in range(merged_windows[-2][1] + 1, window_start):
-                                # if df["time"].iloc[j]>=390.95:
-                                #     print(5)
-                                if j>0 and df["Ptot"].iloc[j] != df["Ptot"].iloc[j - 1]:
-                                    # if j == 719 or j == 722 or j == 723 or j == 725:
-                                    #     print(7)
-                                    valid_peaks = np.insert(valid_peaks, firstPeakAfterPrevAct, j)
-                                    firstPeakAfterPrevAct += 1
-                                    valid_prominences = np.insert(
-                                        valid_prominences, i - 1, 0
-                                    )
-                                    allPeaksFound = False
-                                    i += 1
-                                # if df["Ptot"].iloc[j] > last_quantity + min_peak:
-                                #     valid_peaks = np.insert(valid_peaks, i - 1, j)
-                                #     valid_prominences = np.insert(
-                                #         valid_prominences, i - 1, 0
-                                #     )
-                                #     allPeaksFound = False
-                                #     i += 1
-                                #     in_peak = True
-                                #     exploring_horizontal = 5
-                                # elif (
-                                #     not in_peak
-                                #     and df["Ptot"].iloc[j] < last_quantity
-                                #     and j > 0
-                                #     and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]
-                                # ):
-                                #     last_quantity = df["Ptot"].iloc[j]
-                                # elif j>0 and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]:
-                                #     if exploring_horizontal == 0:
-                                #         last_quantity = df["Ptot"].iloc[j]
-                                #     exploring_horizontal-=1
-                                #     in_peak = False
-                        is_bite.append(diff)
+                        else:
+                            if window_end == len(df)-1 and df0["time"].iloc[len(df0) - 1]!=df["time"].iloc[len(df)-1]:
+                                del final_peaks_indices[-1]
+                                break
+                            merged_windows.append((window_start, window_end))
+                            Duree_activity = (
+                                df["time"].iloc[window_end] - df["time"].iloc[window_start]
+                            )
+                            activity_time += Duree_activity
+                            if Duree_activite_min > Duree_activity:
+                                Duree_activite_min = Duree_activity
+                            if Duree_activite_max < Duree_activity:
+                                Duree_activite_max = Duree_activity
+                            # check if the activity decreases the amount of food
+                            diff = df["Ptot"].iloc[window_end] - df["Ptot"].iloc[window_start]
+                            associatedWith.append(-1)
+                            if diff <= -min_bite_weight:
+                                for index, prev_diff in enumerate(is_bite):
+                                    if abs(prev_diff + diff) < prev_diff / 20 + 1:
+                                        diff = 0
+                                        is_bite[index] = 0
+                                        associatedWith[-1] = index
+                                        break
+                                if diff:
+                                    bouchees += 1
+                                    fin_ind = len(merged_windows)
+                            # check if the food quantity has decreased before this bite
+                            if (
+                                len(merged_windows) > 1
+                                and df["Ptot"].iloc[window_start]
+                                != df["Ptot"].iloc[merged_windows[-2][1]]
+                                and 10):
+                                # go back to see where would be the missing bite
+                                # last_quantity = df["Ptot"].iloc[merged_windows[-2][1]]
+                                in_peak = False
+                                for j in range(merged_windows[-2][1] + 1, window_start):
+                                    # if df["time"].iloc[j]>=390.95:
+                                    #     print(5)
+                                    if j>0 and df["Ptot"].iloc[j] != df["Ptot"].iloc[j - 1]:
+                                        # if j == 719 or j == 722 or j == 723 or j == 725:
+                                        #     print(7)
+                                        valid_peaks = np.insert(valid_peaks, firstPeakAfterPrevAct, j)
+                                        firstPeakAfterPrevAct += 1
+                                        valid_prominences = np.insert(
+                                            valid_prominences, i - 1, 0
+                                        )
+                                        allPeaksFound = False
+                                        i += 1
+                                    # if df["Ptot"].iloc[j] > last_quantity + min_peak:
+                                    #     valid_peaks = np.insert(valid_peaks, i - 1, j)
+                                    #     valid_prominences = np.insert(
+                                    #         valid_prominences, i - 1, 0
+                                    #     )
+                                    #     allPeaksFound = False
+                                    #     i += 1
+                                    #     in_peak = True
+                                    #     exploring_horizontal = 5
+                                    # elif (
+                                    #     not in_peak
+                                    #     and df["Ptot"].iloc[j] < last_quantity
+                                    #     and j > 0
+                                    #     and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]
+                                    # ):
+                                    #     last_quantity = df["Ptot"].iloc[j]
+                                    # elif j>0 and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]:
+                                    #     if exploring_horizontal == 0:
+                                    #         last_quantity = df["Ptot"].iloc[j]
+                                    #     exploring_horizontal-=1
+                                    #     in_peak = False
+                            is_bite.append(diff)
+                            firstPeakAfterPrevAct = i
                         add_peak_update_next = not lastI
-                        firstPeakAfterPrevAct = i
                     else:
                         # Merge peaks if they are close
                         window_end = valid_peaks[i]
@@ -585,56 +643,85 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
     def update_excel():
         global fichier_names
         fichier_names_rows = [name + date_folder for name in fichier_names]
-        def open_excel(file_path, sheet_name):
 
-            # xlsm_file_path = file_path + ".xlsm"
-            # xlsx_file_path = file_path + ".xlsx"
-            # if os.path.exists(xlsm_file_path):
-            #     print(f"{xlsm_file_path} already exists. No action taken.")
-            # elif os.path.exists(xlsx_file_path):
-            #     # Load the .xlsx file
-            #     workbook = openpyxl.load_workbook(xlsx_file_path)
-            #     # Save the workbook as an .xlsm file
-            #     workbook.save(xlsm_file_path)
-            #     print(f"Transformed {xlsx_file_path} to {xlsm_file_path}.")
-            # else:
-            #     # Create a new .xlsm file
-            #     workbook = openpyxl.Workbook()
-            #     workbook.save(xlsm_file_path)
-            #     print(f"Created new file {xlsm_file_path}.")
 
-            # # Add VBA code to the .xlsm file and execute it
-            # with xw.App(visible=True) as app:
-            #     wb = app.books.open(xlsm_file_path)
-            #     vba_module = wb.api.VBProject.VBComponents.Add(1)  # 1 = Module
-            #     vba_code = """
-            #     Sub WriteData()
-            #         Dim ws As Worksheet
-            #         Set ws = ThisWorkbook.Sheets(1)
-            #         ws.Cells(1, 1).Value = "Hello"
-            #         ws.Cells(2, 1).Value = "World"
-            #     End Sub
-            #     """
-            #     vba_module.CodeModule.AddFromString(vba_code)
-            #     wb.save()
-            #     wb.macro('WriteData')()  # Run the VBA macro
-            #     wb.save()
-            #     wb.close()
         
-            file_path = file_path + ".xlsx"
-            excel = win32com.client.Dispatch("Excel.Application")
-            # excel.Visible = True
+        # Function to check if the workbook is already open
+        def is_workbook_open(excel, workbook_name):
+            for workbook in excel.Workbooks:
+                if workbook.Name == workbook_name:
+                    return True
+            return False
 
-            file_path = os.path.abspath(file_path)
-            # Open the workbook (or attach to it if it's already open)
+        def addDataToExcel(row, column, value):
+            colName = ""
+            while column > 0:
+                column -= 1
+                colName = chr(column % 26 + ord('A')) + colName
+                column //= 26
+            dataToExcel.append([f"{colName}{row}", value])
+
+        def open_excel(file_path, sheet_name):
+            # Create a new instance of Excel application
             try:
-                workbook = excel.Workbooks.Open(file_path)
+                excel = win32com.client.GetActiveObject("Excel.Application")
+                excel_visible = False
             except:
-                workbook = excel.Workbooks(file_path.split("\\")[-1])
+                excel = win32com.client.Dispatch("Excel.Application")
+                excel_visible = True
 
-            # Access the specified worksheet
-            sheet = workbook.Sheets(sheet_name)
-            return workbook, sheet
+            # Name of the workbook to check/open
+            workbook_name = file_path.split("\\")[-1]
+
+            # Open the workbook if it is not already open
+            if is_workbook_open(excel, workbook_name):
+                workbook = excel.Workbooks(file_path.split("\\")[-1])
+                workbook_opened = False
+            else:
+                workbook = excel.Workbooks.Open(file_path)
+                workbook_opened = True
+            return excel, workbook, workbook_opened, excel_visible
+
+        # # Define the data to be passed as a string
+        # data_str = ";".join([f"{item[0]}:{item[1]}" for item in dataToExcel])
+
+        # # Run the VBA function with the data string
+        # if searchName:
+        #     excel.Application.Run("ThisWorkbook.SearchAndImportData", sheet_name, searchName, "T", data_str)
+        # else:
+        #     excel.Application.Run("ThisWorkbook.ImportData", sheet_name, data_str)
+
+        def close_excel(excel, workbook, workbook_opened, excel_visible):
+            # Save and close the workbook if it was opened by this script
+            if workbook_opened:
+                workbook.Save()
+                workbook.Close()
+
+            # Quit the Excel application if it was started by this script
+            if excel_visible:
+                excel.Application.Quit()
+
+
+
+
+
+
+
+    
+        # file_path = file_path + ".xlsx"
+        # excel = win32com.client.Dispatch("Excel.Application")
+        # # excel.Visible = True
+
+        # file_path = os.path.abspath(file_path)
+        # # Open the workbook (or attach to it if it's already open)
+        # try:
+        #     workbook = excel.Workbooks.Open(file_path)
+        # except:
+        #     workbook = excel.Workbooks(file_path.split("\\")[-1])
+
+        # # Access the specified worksheet
+        # sheet = workbook.Sheets(sheet_name)
+        # return workbook, sheet
 
         def rgb_to_bgr(rgb_color):
             red = (rgb_color >> 16) & 0xFF
@@ -645,13 +732,29 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
 
         fills = [rgb_to_bgr(color) for color in [activityWithoutBite_bgColor, activityWithBite_bgColor, noActivity_bgColor]]
 
-        workbook, sheet = open_excel(excel_all_path, sheet_name)
-        workbook_segments, sheet_segments = open_excel(excel_segments_path, sheet_name_segment)
+        excel, workbook, workbook_opened, excel_visible = open_excel(excel_all_path, sheet_name)
+        excel_segments, workbook_segments, workbook_opened_segments, excel_visible_segments = open_excel(excel_segments_path, sheet_name_segment)
                 
-        cell_range = sheet_segments.Cells(1, 1)
-        cell_range.Value = "Repas"
 
+        data_lst = ""
+        data_lst_segments = ""
         for fileInd, fichier in enumerate(fichier_names_rows):
+            data_lst.append([fichier])
+            data_lst_segments.append([])
+            for index, key in enumerate(excel_titles[:9], start=11):
+                data_lst[fileInd].append(new_excel[fichier_names[fileInd]][key])
+            for index, window in enumerate(new_excel[fichier_names[fileInd]]["segments"], start=2):
+                data_lst_segments[fileInd].append(f"{round(window[0], 1)}")
+                data_lst_segments[fileInd].append(window[1])
+        data_str = ";".join([":".join(i) for i in data_lst])
+        data_str_segments = ";".join([":".join(i) for i in data_lst_segments])
+        row_found = excel.Application.Run("ThisWorkbook.SearchAndImportData", sheet_name, fichier, "T", data_str)
+        if row_found:
+            excel.Application.Run("ThisWorkbook.ImportSegments", sheet_name, fichier, row_found, data_str_segments)
+        else:
+            print(f"File name {fichier} not found in the main excel.")
+            
+        """for fileInd, fichier in enumerate(fichier_names_rows):
             # Iterate through each row in the column
             segment_num = 1
             used_range = sheet.UsedRange
@@ -660,9 +763,11 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
                 if cell_value == fichier:
                     for index, key in enumerate(excel_titles[:9], start=11):
                         # Edit the specified cell
-                        cell_range = sheet.Cells(row_num, index)
-                        cell_range.Value = new_excel[fichier_names[fileInd]][key]
+                        addDataToExcel(row_num, index, new_excel[fichier_names[fileInd]][key])
+                        # cell_range = sheet.Cells(row_num, index)
+                        # cell_range.Value = new_excel[fichier_names[fileInd]][key]
                     for index, window in enumerate(new_excel[fichier_names[fileInd]]["segments"], start=2):
+                        addDataToExcel(row_num, index, round(window[0], 1))
                         cell_range = sheet_segments.Cells(row_num, index)
                         cell_range.Value = round(window[0], 1)
 
@@ -685,13 +790,13 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
                         segment_num+=1
                         cell_range = sheet_segments.Cells(row_num, 1)
                         cell_range.Value = fichier
-                    break
-            
-        workbook.Save()
-        workbook_segments.Save()
+                    break"""
+        # workbook.Save()
+        # workbook_segments.Save()
+        close_excel(excel, workbook, workbook_opened, excel_visible)
+        close_excel(excel, workbook_segments, workbook_opened_segments, excel_visible_segments)
 
-    update_excel()
-
+    # update_excel()
 
 excel_all_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\Tableau récapitulatif - new algo"
 excel_segments_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\durée_segments"
@@ -738,14 +843,15 @@ sheet_name = "Resultats_merged"
 sheet_name_segment = "Feuil1"
 
 
-dossier = r".\data\benjamin_2_csv\xlsx"
+dossier = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer\A envoyer\xlsx"
 # dossier = r".\data_du_bureau\xlsx"
 # dossier = r".\filtered_data"
 
-dossier_graphique = r".\data\benjamin_2_csv\graph"
+dossier_graphique = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer\A envoyer\graph"
 
 date_folder = ""
 
-# convert_csv_to_xlsx(r".\data\benjamin_2_csv\csv", dossier)
+convert_csv_to_xlsx(r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer\A envoyer\Experiences plateaux", dossier)
 
 find_bites(dossier, dossier_graphique, date_folder)
+# find_bites(dossier, dossier_graphique, date_folder, "14_05_Benjamin.xlsx")
