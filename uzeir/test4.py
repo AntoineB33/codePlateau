@@ -754,7 +754,7 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
         else:
             print(f"File name {fichier} not found in the main excel.")
             
-        """for fileInd, fichier in enumerate(fichier_names_rows):
+        for fileInd, fichier in enumerate(fichier_names_rows):
             # Iterate through each row in the column
             segment_num = 1
             used_range = sheet.UsedRange
@@ -790,7 +790,7 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
                         segment_num+=1
                         cell_range = sheet_segments.Cells(row_num, 1)
                         cell_range.Value = fichier
-                    break"""
+                    break
         # workbook.Save()
         # workbook_segments.Save()
         close_excel(excel, workbook, workbook_opened, excel_visible)
@@ -851,7 +851,7 @@ dossier_graphique = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePla
 
 date_folder = ""
 
-convert_csv_to_xlsx(r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer\A envoyer\Experiences plateaux", dossier)
+# convert_csv_to_xlsx(r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer\A envoyer\Experiences plateaux", dossier)
 
 find_bites(dossier, dossier_graphique, date_folder)
 # find_bites(dossier, dossier_graphique, date_folder, "14_05_Benjamin.xlsx")
