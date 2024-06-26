@@ -239,6 +239,8 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
         df["time"] = df["time"] / 1000
         df0 = df.copy()
         df = df[df["Ptot"] > 10]
+        if not len(df):
+            continue
 
         # df["Ptot"] = np.abs(df["Ptot"])
         # df = df[df["Ptot"] < 3000]
@@ -843,15 +845,15 @@ sheet_name = "Resultats_merged"
 sheet_name_segment = "Feuil1"
 
 
-dossier = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer\A envoyer\xlsx"
+dossier = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine\A envoyer\xlsx"
 # dossier = r".\data_du_bureau\xlsx"
 # dossier = r".\filtered_data"
 
-dossier_graphique = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer\A envoyer\graph"
+dossier_graphique = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine\A envoyer\graph"
 
 date_folder = ""
 
-# convert_csv_to_xlsx(r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer\A envoyer\Experiences plateaux", dossier)
+convert_csv_to_xlsx(r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine\A envoyer\Expériences plateaux", dossier)
 
 find_bites(dossier, dossier_graphique, date_folder)
 # find_bites(dossier, dossier_graphique, date_folder, "14_05_Benjamin.xlsx")
