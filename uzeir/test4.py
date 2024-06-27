@@ -655,15 +655,7 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
                     return True
             return False
 
-        def addDataToExcel(row, column, value):
-            colName = ""
-            while column > 0:
-                column -= 1
-                colName = chr(column % 26 + ord('A')) + colName
-                column //= 26
-            dataToExcel.append([f"{colName}{row}", value])
-
-        def open_excel(file_path, sheet_name):
+        def open_excel(file_path):
             # Create a new instance of Excel application
             try:
                 excel = win32com.client.GetActiveObject("Excel.Application")
@@ -677,11 +669,27 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
 
             # Open the workbook if it is not already open
             if is_workbook_open(excel, workbook_name):
-                workbook = excel.Workbooks(file_path.split("\\")[-1])
+                workbook = excel.Workbooks(workbook_name)
                 workbook_opened = False
             else:
-                workbook = excel.Workbooks.Open(file_path)
+                if os.path.exists(file_path):
+                    workbook = excel.Workbooks.Open(file_path)
+                else:
+                    workbook = excel.Workbooks.Add()
+                    workbook.SaveAs(file_path)
                 workbook_opened = True
+                
+            try:
+                # Remove the existing ThisWorkbook code module if it exists
+                for vb_component in workbook.VBProject.VBComponents:
+                    if vb_component.Name == "ThisWorkbook":
+                        workbook.VBProject.VBComponents.Remove(vb_component)
+                        break
+                # Import the .cls file into the workbook
+                workbook.VBProject.VBComponents.Import(workbook_name.replace("xlsm", ".cls"))
+            except Exception as e:
+                print(f"Failed to import VBA module: {e}")
+
             return excel, workbook, workbook_opened, excel_visible
 
         # # Define the data to be passed as a string
@@ -734,8 +742,8 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
 
         fills = [rgb_to_bgr(color) for color in [activityWithoutBite_bgColor, activityWithBite_bgColor, noActivity_bgColor]]
 
-        excel, workbook, workbook_opened, excel_visible = open_excel(excel_all_path, sheet_name)
-        excel_segments, workbook_segments, workbook_opened_segments, excel_visible_segments = open_excel(excel_segments_path, sheet_name_segment)
+        excel, workbook, workbook_opened, excel_visible = open_excel(dossier_recap, sheet_name)
+        excel_segments, workbook_segments, workbook_opened_segments, excel_visible_segments = open_excel(dossier_recap_segments, sheet_name_segment)
                 
 
         data_lst = ""
@@ -747,58 +755,20 @@ def find_bites(dossier, dossier_graphique, date_folder, file = None):
                 data_lst[fileInd].append(new_excel[fichier_names[fileInd]][key])
             for index, window in enumerate(new_excel[fichier_names[fileInd]]["segments"], start=2):
                 data_lst_segments[fileInd].append(f"{round(window[0], 1)}")
-                data_lst_segments[fileInd].append(window[1])
+                data_lst_segments[fileInd].append(fills[window[1]])
         data_str = ";".join([":".join(i) for i in data_lst])
         data_str_segments = ";".join([":".join(i) for i in data_lst_segments])
-        row_found = excel.Application.Run("ThisWorkbook.SearchAndImportData", sheet_name, fichier, "T", data_str)
+        row_found = excel.Application.Run("ThisWorkbook.SearchAndImportData", sheet_name, "T", data_str)
         if row_found:
-            excel.Application.Run("ThisWorkbook.ImportSegments", sheet_name, fichier, row_found, data_str_segments)
+            excel.Application.Run("ThisWorkbook.ImportSegments", sheet_name, row_found, data_str_segments)
         else:
             print(f"File name {fichier} not found in the main excel.")
-            
-        for fileInd, fichier in enumerate(fichier_names_rows):
-            # Iterate through each row in the column
-            segment_num = 1
-            used_range = sheet.UsedRange
-            for row_num in range(1, used_range.Rows.Count):
-                cell_value = sheet.Cells(row_num, 20).Value
-                if cell_value == fichier:
-                    for index, key in enumerate(excel_titles[:9], start=11):
-                        # Edit the specified cell
-                        addDataToExcel(row_num, index, new_excel[fichier_names[fileInd]][key])
-                        # cell_range = sheet.Cells(row_num, index)
-                        # cell_range.Value = new_excel[fichier_names[fileInd]][key]
-                    for index, window in enumerate(new_excel[fichier_names[fileInd]]["segments"], start=2):
-                        addDataToExcel(row_num, index, round(window[0], 1))
-                        cell_range = sheet_segments.Cells(row_num, index)
-                        cell_range.Value = round(window[0], 1)
-
-                        # Change the background color
-                        cell_range.Interior.Color = fills[window[1]]
-
-                        # Set the border style
-                        # Constants for border styles: https://docs.microsoft.com/en-us/office/vba/api/excel.xllinestyle
-                        xlEdgeLeft = 7
-                        xlEdgeTop = 8
-                        xlEdgeBottom = 9
-                        xlEdgeRight = 10
-
-                        borders = [xlEdgeLeft, xlEdgeTop, xlEdgeBottom, xlEdgeRight]
-                        for border in borders:
-                            cell_range.Borders(border).LineStyle = 1
-
-                        cell_range = sheet_segments.Cells(1, index)
-                        cell_range.Value = f"Segment {segment_num}"
-                        segment_num+=1
-                        cell_range = sheet_segments.Cells(row_num, 1)
-                        cell_range.Value = fichier
-                    break
         # workbook.Save()
         # workbook_segments.Save()
         close_excel(excel, workbook, workbook_opened, excel_visible)
-        close_excel(excel, workbook_segments, workbook_opened_segments, excel_visible_segments)
+        close_excel(excel_segments, workbook_segments, workbook_opened_segments, excel_visible_segments)
 
-    # update_excel()
+    update_excel()
 
 excel_all_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\Tableau récapitulatif - new algo"
 excel_segments_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\durée_segments"
@@ -845,15 +815,18 @@ sheet_name = "Resultats_merged"
 sheet_name_segment = "Feuil1"
 
 
-dossier = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine\A envoyer\xlsx"
-# dossier = r".\data_du_bureau\xlsx"
-# dossier = r".\filtered_data"
 
-dossier_graphique = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine\A envoyer\graph"
-
+path = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine\A envoyer"
 date_folder = ""
 
-convert_csv_to_xlsx(r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine\A envoyer\Expériences plateaux", dossier)
+path += "\\"
+dossier = path + "xlsx"
+dossier_graphique = path + "graph"
+dossier_recap = path + "recap\recap.xlsm"
+dossier_recap_segments = path + "recap\duree_segments.xlsm"
 
-find_bites(dossier, dossier_graphique, date_folder)
+
+convert_csv_to_xlsx(path + "Expériences plateaux", dossier)
+
+find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments)
 # find_bites(dossier, dossier_graphique, date_folder, "14_05_Benjamin.xlsx")
