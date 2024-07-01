@@ -11,23 +11,26 @@ from tensorflow.keras.optimizers import Adam
 # Assuming data is a pandas DataFrame with columns 'time', 'weight', and 'class'
 data = pd.read_csv(r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine(non corrompue)\A envoyer\Expériences plateaux\18_06_24_Benjamin_Roxane.csv")
 
-# Preprocessing
-# Normalize the weight data
+# Normalize the sensor data
 scaler = StandardScaler()
-data['weight'] = scaler.fit_transform(data['weight'].values.reshape(-1, 1))
+data[['P1', 'P2']] = scaler.fit_transform(data[['P1', 'P2']])
 
-# Assuming each segment is identified by a unique segment_id
-segments = data['segment_id'].unique()
-X = []
-y = []
+# Define a function to create segments and labels
+def create_segments_and_labels(data, window_size=50, step=10):
+    segments = []
+    labels = []
+    for start in range(0, len(data) - window_size, step):
+        end = start + window_size
+        segment = data[['P1', 'P2']].iloc[start:end].values
+        segments.append(segment)
+        # Replace this with your actual way of getting labels
+        labels.append(0)  # Dummy label, replace with actual class label for the segment
+    return np.array(segments), np.array(labels)
 
-for segment_id in segments:
-    segment_data = data[data['segment_id'] == segment_id]
-    X.append(segment_data['weight'].values)
-    y.append(segment_data['class'].iloc[0])
-
-X = np.array(X)
-y = np.array(y)
+# Create segments and labels
+window_size = 50
+step = 10
+X, y = create_segments_and_labels(data, window_size, step)
 
 # Convert class labels to one-hot encoding
 y = to_categorical(y)
@@ -38,7 +41,7 @@ X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, r
 
 # Build the CNN model
 model = Sequential()
-model.add(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(X_train.shape[1], 1)))
+model.add(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(window_size, 2)))
 model.add(MaxPooling1D(pool_size=2))
 model.add(Dropout(0.5))
 model.add(Flatten())
