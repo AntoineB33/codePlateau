@@ -1,4 +1,5 @@
 Public Function SearchAndImportData(sheetName As String, columnName As String, data As String) As String
+    ' MsgBox "yu"
     Dim ws As Worksheet
     Dim dataArr() As String
     Dim i As Integer
@@ -18,6 +19,7 @@ Public Function SearchAndImportData(sheetName As String, columnName As String, d
     
     Dim result As String
     dataArr = Split(data, ";")
+    ' MsgBox "yi"
     For i = LBound(dataArr) To UBound(dataArr)
         cellData = Split(dataArr(i), ":")
 
@@ -29,17 +31,27 @@ Public Function SearchAndImportData(sheetName As String, columnName As String, d
             
             For j = LBound(cellData) + 1 To UBound(cellData)
                 ' Write the value in the corresponding cell in the same row
-                ws.Cells(found.Row, startCol + j).Value = cellData(j)
+                ws.Cells(found.row, startCol + j).Value = cellData(j)
             Next j
-            result = result & cellData(LBound(cellData)) & ":" & found.Row & ";"
+            result = result & cellData(LBound(cellData)) & ":" & found.row & ";"
         Else
             result = result & cellData(LBound(cellData)) & ":-1;"
         End If
     Next i
+    ' MsgBox SearchAndImportData
     SearchAndImportData = Left(result, Len(result) - 1)
 End Function
 
+Public Function SearchAndImportData2(sheetName As String, columnName As String, data As String) As String
+    SearchAndImportData2 = "hey there"
+End Function
+
+Public Function test4() As String
+    test4 = "hey there"
+End Function
+
 Sub allFileName(sheetName As String, folderPath As String)
+    ' MsgBox "yo"
     Dim fileName As String
     Dim ws As Worksheet
     Dim row As Integer
@@ -50,7 +62,7 @@ Sub allFileName(sheetName As String, folderPath As String)
     Set ws = ThisWorkbook.Sheets(sheetName) ' Change "Sheet1" to your sheet name
     
     ' Initialize the starting row
-    row = 1
+    row = 2
     
     ' Get the first file name
     fileName = Dir(folderPath)
@@ -68,10 +80,22 @@ Sub allFileName(sheetName As String, folderPath As String)
     Loop
 End Sub
 
+Sub test0(sheetName As String, columnName As String, data As String)
+    MsgBox "hu"
+End Sub
+
 
 Sub test()
     Dim result As String
     result = SearchAndImportData("Feuil1", "T", "hey:1:2:3;yo:4:5:6")
     MsgBox result
 End Sub
+
+Sub test2()
+    Dim result As String
+    result = SearchAndImportData("Resultats_merged", "A", "18_06_24_Benjamin_Roxane_P1:539.259:84:105:221.98799999999963:3.469:43.58800000000008:0.20100000000002183:41.2:64")
+    MsgBox result
+End Sub
+
+
 

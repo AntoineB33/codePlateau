@@ -38,7 +38,8 @@ Public Sub ImportSegments(sheetName As String, row_found As String, data_str_seg
         cell.Value = dataRowData(0)
         dataSegmentsData = Split(dataSegments(i), ":")
         segmentMaxI = 1
-        For j = LBound(dataSegmentsData) To (UBound(dataSegmentsData) - 1) / 2
+        ub = (UBound(dataSegmentsData) - 1) / 2
+        For j = LBound(dataSegmentsData) To ub
             Set cell = ws.Cells(n, j + 2)
             cell.Value = dataSegmentsData(j * 2)
             cell.Interior.Color = dataSegmentsData(j * 2 + 1)
@@ -47,15 +48,18 @@ Public Sub ImportSegments(sheetName As String, row_found As String, data_str_seg
             End If
             segmentMaxI = segmentMaxI + 1
         Next j
-        For j = UBound(dataSegmentsData) + 1 To LBound(dataSegmentsData) + 1 Step -1
+        For j = ub To LBound(dataSegmentsData) Step -1
             ' Define the range you want to apply the borders to
-            Set cell = ws.Cells(n, j)
-            If cell.borders(xlEdgeRight).LineStyle = xlContinuous Then
+            Set cell = ws.Cells(n, j + 2)
+            exitFor = False
+            If cell.borders(xlEdgeLeft).LineStyle = xlContinuous Then
+                exitFor = True
+            End If
+            For Each border In borders
+                cell.borders(border).LineStyle = xlContinuous
+            Next border
+            If exitFor Then
                 Exit For
-            Else
-                For Each border In borders
-                    cell.borders(border).LineStyle = xlContinuous
-                Next border
             End If
         Next j
     Next i
@@ -70,8 +74,10 @@ Public Sub ImportSegments(sheetName As String, row_found As String, data_str_seg
 End Sub
 
 Sub test()
-    ImportSegments "Feuil1", "hey:2;yo2:6", "4.5:16711935:5.5:16711935;5.5:16711935"
+    ImportSegments "Feuil1", "hey:3;yo2:6", "4.5:16711935:5.5:16711935;5.5:16711935"
 End Sub
+
+
 
 
 

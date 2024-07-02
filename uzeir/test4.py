@@ -46,6 +46,7 @@ excel_titles = [
     "Nom fichier",
     "Ustensile"
 ]
+module_name = "addData"  # Name for the new module if it needs to be added
 fichier_names=[]
 dataToExcel = []
 """/////////////////////////////////////////////////////////"""
@@ -231,6 +232,10 @@ def find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_r
     for fichier in fichiers:
         fichier_names.append(os.path.basename(fichier).split(".")[0])
 
+    # Check if the graph folder exists, create it if not
+    if not os.path.exists(dossier_graphique):
+        os.makedirs(dossier_graphique)
+        
     # Traitement des fichiers
     for fileInd, fichier in enumerate(fichier_names):
         print(fichier)
@@ -321,6 +326,9 @@ def find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_r
 
         valid_peaks = np.array(valid_peaks_indices)
         valid_prominences = peak_prominences(df["Ptot"], valid_peaks)[0]
+
+        if len(valid_peaks) == 0:
+            continue
 
         # Filter closely spaced peaks and merge windows
         min_diff = 50  # Minimum difference in indices between consecutive peaks
@@ -625,6 +633,7 @@ def find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_r
             dossier_graphique,
             "Graph_{}.html".format(fichier_names[fileInd]),
         )
+
         fig.write_html(filepath)
 
         # Extract features for each bite and store in a list
@@ -649,9 +658,9 @@ def find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_r
 
         
         # Function to check if the workbook is already open
-        def is_workbook_open(excel, workbook_name):
+        def is_workbook_open(excel, workbook_full_path):
             for workbook in excel.Workbooks:
-                if workbook.Name == workbook_name:
+                if workbook.FullName == workbook_full_path:
                     return True
             return False
         
@@ -667,85 +676,67 @@ def find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_r
                 print(f"Sheet '{sheet_name}' has been added.")
 
         def open_excel(file_path, sheet_name):
-            # Create a new instance of Excel application
+
+            # Open the Excel application
             try:
-                excel = win32com.client.GetActiveObject("Excel.Application")
+                excelLocal = win32com.client.GetActiveObject("Excel.Application")
                 excel_visible = False
             except:
-                excel = win32com.client.Dispatch("Excel.Application")
+                excelLocal = win32com.client.Dispatch("Excel.Application")
                 excel_visible = True
-
-            # Name of the workbook to check/open
+            
+            # Open the workbook
+            # workbookLocal = excelLocal.Workbooks.Open(file_path)
+            
             workbook_name = file_path.split("\\")[-1]
 
             # Open the workbook if it is not already open
-            if is_workbook_open(excel, workbook_name):
-                workbook = excel.Workbooks(workbook_name)
-                check_and_add_sheet(workbook, sheet_name)
-                workbook_opened = False
-            else:
-                if os.path.exists(file_path):
-                    workbook = excel.Workbooks.Open(file_path)
-                    check_and_add_sheet(workbook, sheet_name)
+            workbook_opened = True
+            if os.path.exists(file_path):
+                if is_workbook_open(excelLocal, file_path):
+                    workbookLocal = excelLocal.Workbooks.Open(file_path)
+                    check_and_add_sheet(workbookLocal, sheet_name)
+                    workbook_opened = False
                 else:
-                    workbook = excel.Workbooks.Add()
-                    workbook.Sheets.Add().Name = sheet_name
-                    workbook.SaveAs(file_path, FileFormat=52)
-                workbook_opened = True
-                
-            for vb_component in workbook.VBProject.VBComponents:
-                if vb_component.Name == "ThisWorkbook":
-                    code_module = vb_component.CodeModule
-                    line_count = code_module.CountOfLines
-                    if line_count > 0:
-                        code_module.DeleteLines(1, line_count)
-                    with open(f"uzeir\\{workbook_name.replace(".xlsm", ".cls")}", 'r') as file:
-                        new_vba_code = file.read()
-                    vb_component.CodeModule.AddFromString(new_vba_code)
+                    workbookLocal = excelLocal.Workbooks.Open(file_path)
+                    check_and_add_sheet(workbookLocal, sheet_name)
+            else:
+                workbookLocal = excelLocal.Workbooks.Add()
+                workbookLocal.Sheets.Add().Name = sheet_name
+                workbookLocal.SaveAs(file_path, FileFormat=52)
+
+            # Assuming workbook is already defined and opened as in the provided excerpt
+            module_exists = False
+
+            # Check if the module already exists
+            for vb_component in workbookLocal.VBProject.VBComponents:
+                if vb_component.Name == module_name:
+                    module_exists = True
                     break
 
-            return excel, workbook, workbook_opened, excel_visible
+            # If the module does not exist, add a new module
+            if not module_exists:
+                new_module = workbookLocal.VBProject.VBComponents.Add(1)  # 1 corresponds to vbext_ct_StdModule
+                new_module.Name = module_name
 
-        # # Define the data to be passed as a string
-        # data_str = ";".join([f"{item[0]}:{item[1]}" for item in dataToExcel])
+                # Assuming new_vba_code is defined and contains your VBA function as a string
+                with open(f"uzeir\\{workbook_name.replace('.xlsm', '.bas')}", 'r') as file:
+                    new_vba_code = file.read()
+                new_module.CodeModule.AddFromString(new_vba_code)
 
-        # # Run the VBA function with the data string
-        # if searchName:
-        #     excel.Application.Run("ThisWorkbook.SearchAndImportData", sheet_name, searchName, "T", data_str)
-        # else:
-        #     excel.Application.Run("ThisWorkbook.ImportData", sheet_name, data_str)
+            return excelLocal, workbookLocal, workbook_opened, excel_visible
 
-        def close_excel(excel, workbook, workbook_opened, excel_visible):
+
+        def close_excel(excelLocal, workbookLocal, workbook_opened, excel_visible):
             # Save and close the workbook if it was opened by this script
             if workbook_opened:
-                workbook.Save()
-                workbook.Close()
+                workbookLocal.Save()
+                workbookLocal.Close()
 
             # Quit the Excel application if it was started by this script
             if excel_visible:
-                excel.Application.Quit()
+                excelLocal.Application.Quit()
 
-
-
-
-
-
-
-    
-        # file_path = file_path + ".xlsx"
-        # excel = win32com.client.Dispatch("Excel.Application")
-        # # excel.Visible = True
-
-        # file_path = os.path.abspath(file_path)
-        # # Open the workbook (or attach to it if it's already open)
-        # try:
-        #     workbook = excel.Workbooks.Open(file_path)
-        # except:
-        #     workbook = excel.Workbooks(file_path.split("\\")[-1])
-
-        # # Access the specified worksheet
-        # sheet = workbook.Sheets(sheet_name)
-        # return workbook, sheet
 
         def rgb_to_bgr(rgb_color):
             red = (rgb_color >> 16) & 0xFF
@@ -756,10 +747,14 @@ def find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_r
 
         fills = [str(rgb_to_bgr(color)) for color in [activityWithoutBite_bgColor, activityWithBite_bgColor, noActivity_bgColor]]
 
-        excel, workbook, workbook_opened, excel_visible = open_excel(dossier_recap, sheet_name)        
+        
+        # Check if the recap folder exists, create it if not
+        if not os.path.exists(dossier_graphique):
+            os.makedirs(dossier_graphique)
+        
+        excel, workbook, workbook_opened, excel_visible = open_excel(dossier_recap, sheet_name)
         if writeFileNames:
-            excel.Application.Run("ThisWorkbook.allFileName", sheet_name, dossier)
-        excel_segments, workbook_segments, workbook_opened_segments, excel_visible_segments = open_excel(dossier_recap_segments, sheet_name)
+            excel.Application.Run(module_name + ".allFileName", sheet_name, dossier)
                 
 
         data_lst = []
@@ -774,20 +769,19 @@ def find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_r
                 data_lst_segments[fileInd].append(fills[window[1]])
         data_str = ";".join([":".join(i) for i in data_lst])
         data_str_segments = ";".join([":".join(i) for i in data_lst_segments])
-        # excel2, workbook2, workbook_opened2, excel_visible2 = open_excel(r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\uzeir\testVBA.xlsm", sheet_name)
-        # excel2.Application.Run("ThisWorkbook.SimpleMacro")
-        # row_found = excel2.Application.Run("ThisWorkbook.SearchAndImportData", sheet_name, "T", data_str)
-        row_found = excel.Application.Run("ThisWorkbook.SearchAndImportData", sheet_name, "A", data_str)
+        row_found = excel.Application.Run(module_name + ".SearchAndImportData", sheet_name, "A", data_str)
+        close_excel(excel, workbook, workbook_opened, excel_visible)
+        excel_segments, workbook_segments, workbook_opened_segments, excel_visible_segments = open_excel(dossier_recap_segments, sheet_name)
         if row_found:
-            excel.Application.Run("ThisWorkbook.ImportSegments", sheet_name, row_found, data_str_segments)
+            excel_segments.Application.Run(module_name + ".ImportSegments", sheet_name, row_found, data_str_segments)
         else:
             print(f"File name {fichier} not found in the main excel.")
-        # workbook.Save()
-        # workbook_segments.Save()
-        close_excel(excel, workbook, workbook_opened, excel_visible)
         close_excel(excel_segments, workbook_segments, workbook_opened_segments, excel_visible_segments)
 
     update_excel()
+
+    # def analyseAI():
+        
 
 excel_all_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\Tableau récapitulatif - new algo"
 excel_segments_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\durée_segments"
@@ -835,7 +829,8 @@ sheet_name_segment = "Feuil1"
 
 
 
-path = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine(non corrompue)\A envoyer"
+path = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer(pate a modeler)\A envoyer"
+# path = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine(non corrompue)\A envoyer"
 date_folder = ""
 
 path += "\\"
@@ -845,7 +840,7 @@ dossier_recap = path + r"recap\recap.xlsm"
 dossier_recap_segments = path + r"recap\duree_segments.xlsm"
 
 
-# convert_csv_to_xlsx(path + "Expériences plateaux", dossier)
+# convert_csv_to_xlsx(path + "Expériences plateaux", dossier)
 
-find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file = "18_06_24_Benjamin_Roxane_P1.xlsx", writeFileNames = True)
+find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, writeFileNames = True)
 # find_bites(dossier, dossier_graphique, date_folder, "14_05_Benjamin.xlsx")

@@ -6,42 +6,54 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.optimizers import Adam
+import matplotlib.pyplot as plt
 
 # Load your data
-# Assuming data is a pandas DataFrame with columns 'time', 'weight', and 'class'
-data = pd.read_csv(r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine(non corrompue)\A envoyer\Expériences plateaux\18_06_24_Benjamin_Roxane.csv")
+data = pd.read_csv('your_data.csv')
 
-# Normalize the sensor data
+# Preprocessing
+# Normalize the weight data (P1 and P2)
 scaler = StandardScaler()
 data[['P1', 'P2']] = scaler.fit_transform(data[['P1', 'P2']])
 
-# Define a function to create segments and labels
-def create_segments_and_labels(data, window_size=50, step=10):
-    segments = []
-    labels = []
-    for start in range(0, len(data) - window_size, step):
-        end = start + window_size
-        segment = data[['P1', 'P2']].iloc[start:end].values
-        segments.append(segment)
-        # Replace this with your actual way of getting labels
-        labels.append(0)  # Dummy label, replace with actual class label for the segment
-    return np.array(segments), np.array(labels)
+# Assuming you have a list of tuples with time duration and a boolean indicating if it's a peak
+# Example: segments = [(100, False), (200, True), ...]
+segments = [(200, False), (300, True)]  # Replace with your actual segment information
 
-# Create segments and labels
-window_size = 50
-step = 10
-X, y = create_segments_and_labels(data, window_size, step)
+# Function to segment the data
+def create_segments_and_labels(data, segments):
+    X = []
+    y = []
+    start_index = 0
+    for duration, is_peak in segments:
+        end_index = start_index + duration
+        if end_index > len(data):
+            break
+        segment_data = data.iloc[start_index:end_index]
+        X.append(segment_data[['P1', 'P2']].values)
+        y.append(1 if is_peak else 0)
+        start_index = end_index
+    return np.array(X), np.array(y)
+
+X, y = create_segments_and_labels(data, segments)
+
+# Ensure all segments have the same length
+max_length = max([len(segment) for segment in X])
+X_padded = np.zeros((len(X), max_length, 2))
+
+for i, segment in enumerate(X):
+    X_padded[i, :len(segment), :] = segment
 
 # Convert class labels to one-hot encoding
 y = to_categorical(y)
 
 # Split data into training, validation, and test sets
-X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3, random_state=42)
+X_train, X_temp, y_train, y_temp = train_test_split(X_padded, y, test_size=0.3, random_state=42)
 X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
 
 # Build the CNN model
 model = Sequential()
-model.add(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(window_size, 2)))
+model.add(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(X_train.shape[1], X_train.shape[2])))
 model.add(MaxPooling1D(pool_size=2))
 model.add(Dropout(0.5))
 model.add(Flatten())
@@ -59,11 +71,9 @@ test_loss, test_acc = model.evaluate(X_test, y_test)
 print(f'Test accuracy: {test_acc}')
 
 # Save the model
-model.save('eating_utensil_classifier.h5')
+model.save('segment_peak_classifier.h5')
 
 # Plot training history
-import matplotlib.pyplot as plt
-
 plt.plot(history.history['accuracy'], label='train accuracy')
 plt.plot(history.history['val_accuracy'], label='val accuracy')
 plt.xlabel('Epoch')
