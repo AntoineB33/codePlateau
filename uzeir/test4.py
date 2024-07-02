@@ -701,9 +701,13 @@ def find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_r
                     workbookLocal = excelLocal.Workbooks.Open(file_path)
                     check_and_add_sheet(workbookLocal, sheet_name)
             else:
+                # Check if the graph folder exists, create it if not
+                if not os.path.exists(dossier_recap):
+                    os.makedirs(dossier_recap)
                 workbookLocal = excelLocal.Workbooks.Add()
                 workbookLocal.Sheets.Add().Name = sheet_name
                 workbookLocal.SaveAs(file_path, FileFormat=52)
+
 
             # Assuming workbook is already defined and opened as in the provided excerpt
             module_exists = False
