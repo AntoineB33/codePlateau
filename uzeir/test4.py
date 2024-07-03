@@ -90,8 +90,7 @@ def convert_csv_to_xlsx(folder_path, xlsx_folder_path=""):
         # Ensure the output folder path exists
         if not xlsx_folder_path:
             xlsx_folder_path = folder_path
-        if not os.path.exists(xlsx_folder_path):
-            os.makedirs(xlsx_folder_path)
+        os.makedirs(xlsx_folder_path, exist_ok=True)
 
         # Process each column against the first column as abscissa
         for col in df.columns[1:]:
@@ -153,7 +152,7 @@ def convert_csv_to_xlsx0(folder_path, xlsx_folder_path=""):
         print(f"Converted '{file}' to '{new_file_path}'")
 
 
-def find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file = None, writeFileNames = False):
+def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file = None, writeFileNames = False):
     global fichier_names
 
     fichiers = []
@@ -233,8 +232,7 @@ def find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_r
         fichier_names.append(os.path.basename(fichier).split(".")[0])
 
     # Check if the graph folder exists, create it if not
-    if not os.path.exists(dossier_graphique):
-        os.makedirs(dossier_graphique)
+    os.makedirs(dossier_graphique, exist_ok=True)
         
     # Traitement des fichiers
     for fileInd, fichier in enumerate(fichier_names):
@@ -676,6 +674,34 @@ def find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_r
                 print(f"Sheet '{sheet_name}' has been added.")
 
         def open_excel(file_path, sheet_name):
+            # File name and sheet name
+            file_name = 'sample.xlsm'
+            full_file_path = os.path.abspath(file_name)  # Get the absolute path to the file
+            sheet_name = 'MySheet'
+            bas_file_path = r'C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\uzeir\recap.bas'  # Update this to the path of your .bas file
+
+            # Check if the specific workbook is already open by its full path
+            was_open = False
+            for book in xw.books:
+                if book.fullname == full_file_path:
+                    wb = book
+                    was_open = True
+                    break
+                
+            # Open the workbook if it is not already open
+            if not was_open:
+                wb = xw.Book(file_name)
+            else:
+                wb = xw.books[file_name]
+
+            # Add the sheet if it doesn't exist
+            add_sheet_if_not_exists(wb, sheet_name)
+
+            # Update the VBA module with the code from the .bas file
+            update_vba_module_from_bas(wb, bas_file_path)
+
+
+
 
             # Open the Excel application
             try:
@@ -694,16 +720,18 @@ def find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_r
             workbook_opened = True
             if os.path.exists(file_path):
                 if is_workbook_open(excelLocal, file_path):
-                    workbookLocal = excelLocal.Workbooks.Open(file_path)
-                    check_and_add_sheet(workbookLocal, sheet_name)
                     workbook_opened = False
                 else:
-                    workbookLocal = excelLocal.Workbooks.Open(file_path)
-                    check_and_add_sheet(workbookLocal, sheet_name)
+                    wb = openpyxl.Workbook()
+                    wb.save(file_path)
+                workbookLocal = excelLocal.Workbooks.Open(file_path)
+                check_and_add_sheet(workbookLocal, sheet_name)
             else:
                 # Check if the graph folder exists, create it if not
-                if not os.path.exists(dossier_recap):
-                    os.makedirs(dossier_recap)
+                folder_recap = file_path.rsplit("\\")[0]
+                os.makedirs(folder_recap, exist_ok=True)
+                wb = openpyxl.Workbook()
+                wb.save(file_path)
                 workbookLocal = excelLocal.Workbooks.Add()
                 workbookLocal.Sheets.Add().Name = sheet_name
                 workbookLocal.SaveAs(file_path, FileFormat=52)
@@ -734,8 +762,7 @@ def find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_r
         def close_excel(excelLocal, workbookLocal, workbook_opened, excel_visible):
             # Save and close the workbook if it was opened by this script
             if workbook_opened:
-                workbookLocal.Save()
-                workbookLocal.Close()
+                workbookLocal.Close(SaveChanges=True)
 
             # Quit the Excel application if it was started by this script
             if excel_visible:
@@ -751,12 +778,9 @@ def find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_r
 
         fills = [str(rgb_to_bgr(color)) for color in [activityWithoutBite_bgColor, activityWithBite_bgColor, noActivity_bgColor]]
 
+
         
-        # Check if the recap folder exists, create it if not
-        if not os.path.exists(dossier_graphique):
-            os.makedirs(dossier_graphique)
-        
-        excel, workbook, workbook_opened, excel_visible = open_excel(dossier_recap, sheet_name)
+        excel, workbook, workbook_opened, excel_visible = open_excel(xlsm_recap, sheet_name)
         if writeFileNames:
             excel.Application.Run(module_name + ".allFileName", sheet_name, dossier)
                 
@@ -775,7 +799,7 @@ def find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_r
         data_str_segments = ";".join([":".join(i) for i in data_lst_segments])
         row_found = excel.Application.Run(module_name + ".SearchAndImportData", sheet_name, "A", data_str)
         close_excel(excel, workbook, workbook_opened, excel_visible)
-        excel_segments, workbook_segments, workbook_opened_segments, excel_visible_segments = open_excel(dossier_recap_segments, sheet_name)
+        excel_segments, workbook_segments, workbook_opened_segments, excel_visible_segments = open_excel(xlsm_recap_segments, sheet_name)
         if row_found:
             excel_segments.Application.Run(module_name + ".ImportSegments", sheet_name, row_found, data_str_segments)
         else:
@@ -846,5 +870,5 @@ dossier_recap_segments = path + r"recap\duree_segments.xlsm"
 
 # convert_csv_to_xlsx(path + "Expériences plateaux", dossier)
 
-find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, writeFileNames = True)
+find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file = "180624_Dorian_Laura_P1.xlsx", writeFileNames = True)
 # find_bites(dossier, dossier_graphique, date_folder, "14_05_Benjamin.xlsx")

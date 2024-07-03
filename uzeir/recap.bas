@@ -99,3 +99,11 @@ End Sub
 
 
 
+
+
+Function MyFunction()
+    MsgBox "Hello, World!"
+End Function
+Sub MyFunctions()
+    MsgBox "Hello, World!"
+End Sub
