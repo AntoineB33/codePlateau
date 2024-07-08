@@ -104,6 +104,6 @@ End Sub
 Function MyFunction()
     MsgBox "Hello, World!"
 End Function
-Sub MyFunctions()
-    MsgBox "Hello, World!"
+Sub MyFunctions(sheetName As String, sheetName2 As String)
+    MsgBox "Hello, World!" & sheetName & sheetName2
 End Sub

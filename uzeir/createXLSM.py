@@ -35,47 +35,45 @@ file_name = 'sample2.xlsm'
 full_file_path = os.path.abspath(file_name)  # Get the absolute path to the file
 recap_folder = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\uzeir" + "\\"
 sheet_name = 'MySheet'
-bas_file_path = os.path.abspath('recap.bas')
-
-# def writing():
-#     with open(recap_folder + 'update_for_next_.txt', 'a') as f:
-#         f.write('\nExcel is not open')
+bas_file_path = os.path.abspath('uzeir\\recap.bas')
 
 full_file_path = recap_folder + file_name
-while 1:
-    the_file_exists = True
-    if not os.path.exists(full_file_path):
-        app = xw.App(visible=open_all)
-        the_file_exists = False
-        wb = app.books.add()
+the_file_exists = True
+if not os.path.exists(full_file_path):
+    app = xw.App(visible=open_all)
+    the_file_exists = False
+    wb = app.books.add()
 
-    is_open = False
-    if the_file_exists:
-        # Check if the specific workbook is already open by its full path
+is_open = False
+if the_file_exists:
+    # Check if the specific workbook is already open by its full path
+    app = xw.apps.active
+    if app:
         for book in xw.books:
             if book.fullname == full_file_path:
                 wb = book
                 is_open = True
                 break
-        if not is_open:
-            app = xw.App(visible=open_all)
-            wb = app.books.open(full_file_path)
+    if not is_open:
+        app = xw.App(visible=open_all)
+        wb = app.books.open(full_file_path)
 
 
-    # Add the sheet if it doesn't exist
-    add_sheet_if_not_exists(wb, sheet_name)
+# Add the sheet if it doesn't exist
+add_sheet_if_not_exists(wb, sheet_name)
 
-    # Update the VBA module with the code from the .bas file
-    update_vba_module_from_bas(wb, bas_file_path)
+# Update the VBA module with the code from the .bas file
+update_vba_module_from_bas(wb, bas_file_path)
 
-    wb.macro("Module1.MyFunction")()
-    wb.macro("Module1.MyFunctions")()
+wb.macro("Module1.MyFunctions")("hey", "yi")
 
-    # Save the workbook and close it if it was not already open
+# Save the workbook and close it if it was not already open
+if not the_file_exists:
     wb.save(full_file_path)
-    if not the_file_exists:
-        wb.close()
-        app.quit()
-    break
+else:
+    wb.save()
+if not open_all and not is_open:
+    wb.close()
+    app.quit()
 
 print(f"Workbook '{file_name}' with sheet '{sheet_name}' and updated VBA module from '{bas_file_path}' added successfully.")

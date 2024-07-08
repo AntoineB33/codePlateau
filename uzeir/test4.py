@@ -33,22 +33,10 @@ min_plate_weight = 700
 noActivity_bgColor = 0xCDCDCC
 activityWithBite_bgColor = 0xEBBE45
 activityWithoutBite_bgColor = 0xCAECC7
-excel_titles = [
-    "Duree_Totale",
-    "Poids_Conso",
-    "Action",
-    "Duree_activite_Totale",
-    "Duree_activite_mean",
-    "Duree_activite_max",
-    "Duree_activite_min",
-    "Proportion_activite",
-    "Bouchees",
-    "Nom fichier",
-    "Ustensile"
-]
 module_name = "addData"  # Name for the new module if it needs to be added
 fichier_names=[]
 dataToExcel = []
+recap_sheet_name = "Resultats_merged"
 """/////////////////////////////////////////////////////////"""
 
 import os
@@ -107,52 +95,86 @@ def convert_csv_to_xlsx(folder_path, xlsx_folder_path=""):
                 new_df.to_excel(new_file_path, index=False)
                 # print(f"Converted '{file}' column '{col}' to '{new_file_path}'")
 
+# Function to add or update the sheet if it doesn't exist
+def add_sheet_if_not_exists(wb, sheet_name):
+    if sheet_name not in [sheet.name for sheet in wb.sheets]:
+        wb.sheets.add(sheet_name)
+
+# Function to update VBA module with code from .bas file
+def update_vba_module_from_bas(wb, bas_file_path):
+    # Read the .bas file contents
+    with open(bas_file_path, 'r') as file:
+        vba_code = file.read()
+    
+    # Check if the module exists
+    module_exists = False
+    for component in wb.api.VBProject.VBComponents:
+        if component.Name == module_name:
+            module_exists = True
+            module = component
+            break
+
+    # If the module doesn't exist, create it
+    if not module_exists:
+        module = wb.api.VBProject.VBComponents.Add(1)
+        module.Name = module_name
+
+    # Replace the existing code with the new code from the .bas file
+    module.CodeModule.DeleteLines(1, module.CodeModule.CountOfLines)
+    module.CodeModule.AddFromString(vba_code)
+
+def rgb_to_bgr(rgb_color):
+    red = (rgb_color >> 16) & 0xFF
+    green = (rgb_color >> 8) & 0xFF
+    blue = rgb_color & 0xFF
+    bgr_color = (blue << 16) | (green << 8) | red
+    return bgr_color
+
+def open_xlsm(full_file_path, open_all, *sheet_names):
+    the_file_exists = True
+    if not os.path.exists(full_file_path):
+        app = xw.App(visible=open_all)
+        the_file_exists = False
+        wb = app.books.add()
+
+    is_open = False
+    if the_file_exists:
+        # Check if the specific workbook is already open by its full path
+        app = xw.apps.active
+        if app:
+            for book in xw.books:
+                if book.fullname == full_file_path:
+                    wb = book
+                    is_open = True
+                    break
+        if not is_open:
+            app = xw.App(visible=open_all)
+            wb = app.books.open(full_file_path)
 
 
-def convert_csv_to_xlsx0(folder_path, xlsx_folder_path=""):
-    # List all files in the given folder
-    files = [file for file in os.listdir(folder_path) if file.endswith(".csv") or file.endswith(".CSV")]
+    # Add the sheet if it doesn't exist
+    for sheet_name in sheet_names:
+        add_sheet_if_not_exists(wb, sheet_name)
+    
+    if open_all and not is_open:
+        wb.window_state = 'maximized'
 
-    # Process each file
-    for file in files:
-        # Construct full file path
-        file_path = os.path.join(folder_path, file)
+    # Update the VBA module with the code from the .bas file
+    bas_file_path = "uzeir\\" + full_file_path.split("\\")[-1].replace('.xlsm', '.bas')
+    update_vba_module_from_bas(wb, bas_file_path, )
+    return app, wb, the_file_exists, is_open
 
-        # Read the CSV file content
-        with open(file_path, "r") as f:
-            lines = f.readlines()
+def close_xlsm(app, wb, full_file_path, the_file_exists, is_open, open_all):
+    # Save the workbook and close it if it was not already open
+    if not the_file_exists:
+        wb.save(full_file_path)
+    else:
+        wb.save()
+    if not open_all and not is_open:
+        wb.close()
+        app.quit()
 
-        # Check if the first line contains only integers
-        first_line = lines[0].strip()
-        if all(item.isdigit() for item in first_line.split(",")):
-            # If the first line contains only integers, do not skip it
-            data = "".join(lines)
-        else:
-            # If the first line contains non-integer values, skip it
-            data = "".join(lines[1:])
-
-        # Replace semicolons with commas in the data
-        if "," not in data:
-            data = data.replace(";", ",")
-
-        # Write the updated content back to the CSV file (if modified)
-        with open(file_path, "w") as f:
-            f.write(data)
-
-        # Read the CSV file into a DataFrame
-        df = pd.read_csv(file_path)
-
-        # Create a new Excel file path
-        if not xlsx_folder_path:
-            xlsx_folder_path = folder_path
-        new_file_path = os.path.join(xlsx_folder_path, file.replace(".CSV", ".xlsx").replace(".csv", ".xlsx"))
-
-        # Write data to an Excel file
-        df.to_excel(new_file_path, index=False)
-        print(f"Converted '{file}' to '{new_file_path}'")
-
-
-def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file = None, writeFileNames = False):
+def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file = None, writeFileNames = False, to_update_excels = True, open_all = True):
     global fichier_names
 
     fichiers = []
@@ -177,7 +199,8 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
     # )
 
     print(dossier)
-    new_excel = dict()
+    recap_excel = dict()
+    segment_excel = dict()
 
 
     # Fonction pour convertir le temps en minutes et secondes
@@ -523,26 +546,66 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         print(f"Le ratio d'activité est : {ratio}")
         print(f"Le nombre de bouchée pendant le repas est : {bouchees}")
 
-        new_excel[fichier] = dict()
-        new_excel[fichier]["Bouchees"] = bouchees
-        new_excel[fichier]["Proportion_activite"] = round(ratio * 100, 1)
-        new_excel[fichier]["Duree_activite_min"] = Duree_activite_min
-        new_excel[fichier]["Duree_activite_max"] = Duree_activite_max
-        new_excel[fichier]["Duree_activite_mean"] = round(activity_time / bouchees, 3)
-        new_excel[fichier]["Duree_activite_Totale"] = activity_time
-        new_excel[fichier]["Action"] = len(merged_windows)
-        new_excel[fichier]["Poids_Conso"] = poids_consome
-        new_excel[fichier]["Duree_Totale"] = temps_repas
+        recap_excel[fichier] = dict()
+        recap_excel[fichier]["Bouchees"] = bouchees
+        recap_excel[fichier]["Proportion_activite"] = round(ratio * 100, 1)
+        recap_excel[fichier]["Duree_activite_min"] = Duree_activite_min
+        recap_excel[fichier]["Duree_activite_max"] = Duree_activite_max
+        recap_excel[fichier]["Duree_activite_mean"] = round(activity_time / bouchees, 3)
+        recap_excel[fichier]["Duree_activite_Totale"] = activity_time
+        recap_excel[fichier]["Action"] = len(merged_windows)
+        recap_excel[fichier]["Poids_Conso"] = poids_consome
+        recap_excel[fichier]["Poids_Moyen"] = temps_repas
+        recap_excel[fichier]["Poids_Min"] = temps_repas
+        recap_excel[fichier]["Poids_Max"] = temps_repas
+        recap_excel[fichier]["Sd_Poids"] = temps_repas
+        recap_excel[fichier]["Travail_Moyen"] = temps_repas
+        recap_excel[fichier]["Travail_Min"] = temps_repas
+        recap_excel[fichier]["Travail_Max"] = temps_repas
+        recap_excel[fichier]["Sd_Travail"] = temps_repas
+        recap_excel[fichier]["Force_Max"] = temps_repas
+        recap_excel[fichier]["Nb_segment_tot"] = temps_repas
+        recap_excel[fichier]["Nb_segment_bouchee"] = temps_repas
+        recap_excel[fichier]["Nb_segment_action_sans_bouchee"] = temps_repas
+        recap_excel[fichier]["Nb_segment_inacivite"] = temps_repas
+        recap_excel[fichier]["Duree_segm_bouchee_Moyenne"] = temps_repas
+        recap_excel[fichier]["Duree_segm_bouchee_Min"] = temps_repas
+        recap_excel[fichier]["Duree_segm_bouchee_Max"] = temps_repas
+        recap_excel[fichier]["Duree_segm_bouchee_Sd"] = temps_repas
+        recap_excel[fichier]["Duree_segm_action-b_Moyenne"] = temps_repas
+        recap_excel[fichier]["Duree_segm_action-b_Min"] = temps_repas
+        recap_excel[fichier]["Duree_segm_action-b_Max"] = temps_repas
+        recap_excel[fichier]["Duree_segm_action-b_Sd"] = temps_repas
+        recap_excel[fichier]["Duree_segm_inacivite_Moyenne"] = temps_repas
+        recap_excel[fichier]["Duree_segm_inacivite_Min"] = temps_repas
+        recap_excel[fichier]["Duree_segm_inacivite_Max"] = temps_repas
+        recap_excel[fichier]["Duree_segm_inacivite_Sd"] = temps_repas
+
+        segment_excel[fichier] = dict()
 
         # storing the duration of each action
-        segments = []
+        segment_excel[fichier]["duree"] = []
+        segment_excel[fichier]["poids"] = []
+        segment_excel[fichier]["ecart de temps"] = []
+        segment_excel[fichier]["travail"] = []
+        segment_excel[fichier]["Force Max"] = []
+        segment_excel[fichier]["colors"] = []
         for index, window in enumerate(merged_windows):
-            segments.append([df["time"].iloc[window[1]] - df["time"].iloc[window[0]], int(is_bite[index] <= -min_bite_weight)])
+            segment_excel[fichier]["duree"].append(df["time"].iloc[window[1]] - df["time"].iloc[window[0]])
+            segment_excel[fichier]["poids"].append(df["time"].iloc[window[1]] - df["time"].iloc[window[0]])
+            segment_excel[fichier]["ecart de temps"].append(df["time"].iloc[window[1]] - df["time"].iloc[window[0]])
+            segment_excel[fichier]["travail"].append(df["time"].iloc[window[1]] - df["time"].iloc[window[0]])
+            segment_excel[fichier]["Force Max"].append(df["time"].iloc[window[1]] - df["time"].iloc[window[0]])
+            segment_excel[fichier]["colors"].append(int(is_bite[index] <= -min_bite_weight))
             if index + 1 < len(merged_windows):
                 diff = df["time"].iloc[merged_windows[index + 1][0]] - df["time"].iloc[window[1]]
                 if diff:
-                    segments.append([diff, 2])
-        new_excel[fichier]["segments"] = segments
+                    segment_excel[fichier]["duree"].append(diff)
+                    segment_excel[fichier]["poids"].append(0)
+                    segment_excel[fichier]["ecart de temps"].append(0)
+                    segment_excel[fichier]["travail"].append(0)
+                    segment_excel[fichier]["Force Max"].append(0)
+                    segment_excel[fichier]["colors"].append(2)
 
         # Création de graphiques avec Plotly
         fig = Figure()
@@ -649,172 +712,51 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         # Save to CSV
         features_df.to_csv("bite_features.csv", index=False)
 
-    def update_excel():
-        global fichier_names
+    if to_update_excels:
         fichier_names_rows = [name + date_folder for name in fichier_names]
 
 
-        
-        # Function to check if the workbook is already open
-        def is_workbook_open(excel, workbook_full_path):
-            for workbook in excel.Workbooks:
-                if workbook.FullName == workbook_full_path:
-                    return True
-            return False
-        
-        def check_and_add_sheet(workbook, sheet_name):
-            sheet_exists = False
-            for sheet in workbook.Sheets:
-                if sheet.Name == sheet_name:
-                    sheet_exists = True
-                    break
-
-            if not sheet_exists:
-                workbook.Sheets.Add().Name = sheet_name
-                print(f"Sheet '{sheet_name}' has been added.")
-
-        def open_excel(file_path, sheet_name):
-            # File name and sheet name
-            file_name = 'sample.xlsm'
-            full_file_path = os.path.abspath(file_name)  # Get the absolute path to the file
-            sheet_name = 'MySheet'
-            bas_file_path = r'C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\uzeir\recap.bas'  # Update this to the path of your .bas file
-
-            # Check if the specific workbook is already open by its full path
-            was_open = False
-            for book in xw.books:
-                if book.fullname == full_file_path:
-                    wb = book
-                    was_open = True
-                    break
-                
-            # Open the workbook if it is not already open
-            if not was_open:
-                wb = xw.Book(file_name)
-            else:
-                wb = xw.books[file_name]
-
-            # Add the sheet if it doesn't exist
-            add_sheet_if_not_exists(wb, sheet_name)
-
-            # Update the VBA module with the code from the .bas file
-            update_vba_module_from_bas(wb, bas_file_path)
-
-
-
-
-            # Open the Excel application
-            try:
-                excelLocal = win32com.client.GetActiveObject("Excel.Application")
-                excel_visible = False
-            except:
-                excelLocal = win32com.client.Dispatch("Excel.Application")
-                excel_visible = True
-            
-            # Open the workbook
-            # workbookLocal = excelLocal.Workbooks.Open(file_path)
-            
-            workbook_name = file_path.split("\\")[-1]
-
-            # Open the workbook if it is not already open
-            workbook_opened = True
-            if os.path.exists(file_path):
-                if is_workbook_open(excelLocal, file_path):
-                    workbook_opened = False
-                else:
-                    wb = openpyxl.Workbook()
-                    wb.save(file_path)
-                workbookLocal = excelLocal.Workbooks.Open(file_path)
-                check_and_add_sheet(workbookLocal, sheet_name)
-            else:
-                # Check if the graph folder exists, create it if not
-                folder_recap = file_path.rsplit("\\")[0]
-                os.makedirs(folder_recap, exist_ok=True)
-                wb = openpyxl.Workbook()
-                wb.save(file_path)
-                workbookLocal = excelLocal.Workbooks.Add()
-                workbookLocal.Sheets.Add().Name = sheet_name
-                workbookLocal.SaveAs(file_path, FileFormat=52)
-
-
-            # Assuming workbook is already defined and opened as in the provided excerpt
-            module_exists = False
-
-            # Check if the module already exists
-            for vb_component in workbookLocal.VBProject.VBComponents:
-                if vb_component.Name == module_name:
-                    module_exists = True
-                    break
-
-            # If the module does not exist, add a new module
-            if not module_exists:
-                new_module = workbookLocal.VBProject.VBComponents.Add(1)  # 1 corresponds to vbext_ct_StdModule
-                new_module.Name = module_name
-
-                # Assuming new_vba_code is defined and contains your VBA function as a string
-                with open(f"uzeir\\{workbook_name.replace('.xlsm', '.bas')}", 'r') as file:
-                    new_vba_code = file.read()
-                new_module.CodeModule.AddFromString(new_vba_code)
-
-            return excelLocal, workbookLocal, workbook_opened, excel_visible
-
-
-        def close_excel(excelLocal, workbookLocal, workbook_opened, excel_visible):
-            # Save and close the workbook if it was opened by this script
-            if workbook_opened:
-                workbookLocal.Close(SaveChanges=True)
-
-            # Quit the Excel application if it was started by this script
-            if excel_visible:
-                excelLocal.Application.Quit()
-
-
-        def rgb_to_bgr(rgb_color):
-            red = (rgb_color >> 16) & 0xFF
-            green = (rgb_color >> 8) & 0xFF
-            blue = rgb_color & 0xFF
-            bgr_color = (blue << 16) | (green << 8) | red
-            return bgr_color
 
         fills = [str(rgb_to_bgr(color)) for color in [activityWithoutBite_bgColor, activityWithBite_bgColor, noActivity_bgColor]]
-
-
         
-        excel, workbook, workbook_opened, excel_visible = open_excel(xlsm_recap, sheet_name)
-        if writeFileNames:
-            excel.Application.Run(module_name + ".allFileName", sheet_name, dossier)
-                
+        app, wb, the_file_exists, is_open = open_xlsm(xlsm_recap, open_all, recap_sheet_name)
 
+        if writeFileNames:
+            wb.macro(module_name + ".allFileName")(recap_sheet_name, dossier)
+
+            
         data_lst = []
         data_lst_segments = []
         for fileInd, fichier in enumerate(fichier_names_rows):
             data_lst.append([fichier])
             data_lst_segments.append([])
-            for key in excel_titles[:9]:
-                data_lst[fileInd].append(str(new_excel[fichier_names[fileInd]][key]))
-            for window in new_excel[fichier_names[fileInd]]["segments"]:
-                data_lst_segments[fileInd].append(str(round(window[0], 1)))
-                data_lst_segments[fileInd].append(fills[window[1]])
+            # loop throught the keys of new_excel
+            for key in recap_excel[fichier].keys():
+                data_lst[fileInd].append(str(recap_excel[fichier_names[fileInd]][key]))
+            data_lst_segments[fileInd].append([])
+            for window in segment_excel[fichier_names[fileInd]]["colors"]:
+                data_lst_segments[fileInd][-1].append(fills[window])
+            for key in segment_excel[fichier].keys():
+                data_lst_segments[fileInd].append([key])
+                for window in segment_excel[fichier_names[fileInd]][key]:
+                    data_lst_segments[fileInd][-1].append(str(round(window, 1)))
         data_str = ";".join([":".join(i) for i in data_lst])
-        data_str_segments = ";".join([":".join(i) for i in data_lst_segments])
-        row_found = excel.Application.Run(module_name + ".SearchAndImportData", sheet_name, "A", data_str)
-        close_excel(excel, workbook, workbook_opened, excel_visible)
-        excel_segments, workbook_segments, workbook_opened_segments, excel_visible_segments = open_excel(xlsm_recap_segments, sheet_name)
+        data_str_segments = ";".join(["_".join([":".join(j) for j in i]) for i in data_lst_segments])
+        segment_colors_str = ";".join([":".join(i) for i in segment_colors])
+        row_found = wb.macro(module_name + ".SearchAndImportData")(recap_sheet_name, "A", data_str)
+        close_xlsm(app, wb, xlsm_recap, the_file_exists, is_open, open_all)
+        app, wb, the_file_exists, is_open = open_xlsm(xlsm_recap_segments, open_all, *segment_excel.keys())
         if row_found:
-            excel_segments.Application.Run(module_name + ".ImportSegments", sheet_name, row_found, data_str_segments)
+            wb.macro(module_name + ".ImportSegments")(recap_sheet_name, row_found, data_str_segments)
         else:
             print(f"File name {fichier} not found in the main excel.")
-        close_excel(excel_segments, workbook_segments, workbook_opened_segments, excel_visible_segments)
-
-    update_excel()
+        close_xlsm(app, wb, xlsm_recap_segments, the_file_exists, is_open, open_all)
 
     # def analyseAI():
         
 
 excel_all_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\Tableau récapitulatif - new algo"
 excel_segments_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\durée_segments"
-sheet_name = "Resultats_merged"
-sheet_name_segment = "Feuil1"
 
 
 dossier = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\27_05_24_xlsx"
@@ -852,7 +794,7 @@ date_folder = "_28_05_24"
 
 excel_all_path = r".\data\benjamin_2_csv\Tableau récapitulatif - new algo"
 excel_segments_path = r".\data\benjamin_2_csv\durée_segments"
-sheet_name = "Resultats_merged"
+recap_sheet_name = "Resultats_merged"
 sheet_name_segment = "Feuil1"
 
 
@@ -865,10 +807,13 @@ path += "\\"
 dossier = path + "xlsx"
 dossier_graphique = path + "graph"
 dossier_recap = path + r"recap\recap.xlsm"
-dossier_recap_segments = path + r"recap\duree_segments.xlsm"
+dossier_recap_segments = path + r"recap\segments.xlsm"
 
 
 # convert_csv_to_xlsx(path + "Expériences plateaux", dossier)
 
 find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file = "180624_Dorian_Laura_P1.xlsx", writeFileNames = True)
 # find_bites(dossier, dossier_graphique, date_folder, "14_05_Benjamin.xlsx")
+
+
+open_all = False
