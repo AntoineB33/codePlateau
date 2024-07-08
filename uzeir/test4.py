@@ -156,6 +156,13 @@ def open_xlsm(full_file_path, open_all, *sheet_names):
     for sheet_name in sheet_names:
         add_sheet_if_not_exists(wb, sheet_name)
     
+    # Delete the default sheet if is not required
+    if not the_file_exists:
+        for sheet in wb.sheets:
+            if sheet not in sheet_names:
+                sheet.delete()
+                break
+    
     if open_all and not is_open:
         wb.window_state = 'maximized'
 
@@ -727,27 +734,27 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
             
         data_lst = []
         data_lst_segments = []
+        if fichier_names_rows:
+            recap_keys = sorted(recap_excel[fichier].keys())
+            segment_keys = sorted(segment_excel[fichier].keys())
         for fileInd, fichier in enumerate(fichier_names_rows):
             data_lst.append([fichier])
             data_lst_segments.append([])
             # loop throught the keys of new_excel
-            for key in recap_excel[fichier].keys():
+            for key in recap_keys:
                 data_lst[fileInd].append(str(recap_excel[fichier_names[fileInd]][key]))
-            data_lst_segments[fileInd].append([])
-            for window in segment_excel[fichier_names[fileInd]]["colors"]:
-                data_lst_segments[fileInd][-1].append(fills[window])
-            for key in segment_excel[fichier].keys():
-                data_lst_segments[fileInd].append([key])
+            for key in segment_keys:
                 for window in segment_excel[fichier_names[fileInd]][key]:
                     data_lst_segments[fileInd][-1].append(str(round(window, 1)))
-        data_str = ";".join([":".join(i) for i in data_lst])
-        data_str_segments = ";".join(["_".join([":".join(j) for j in i]) for i in data_lst_segments])
-        segment_colors_str = ";".join([":".join(i) for i in segment_colors])
-        row_found = wb.macro(module_name + ".SearchAndImportData")(recap_sheet_name, "A", data_str)
+        recap_tabs_VBA = xw.utils.to_excel_array(recap_keys)
+        recap_data_VBA = xw.utils.to_excel_array(data_lst)
+        row_found = wb.macro(module_name + ".SearchAndImportData")(recap_sheet_name, "A", recap_tabs_VBA, recap_data_VBA)
         close_xlsm(app, wb, xlsm_recap, the_file_exists, is_open, open_all)
-        app, wb, the_file_exists, is_open = open_xlsm(xlsm_recap_segments, open_all, *segment_excel.keys())
+        app, wb, the_file_exists, is_open = open_xlsm(xlsm_recap_segments, open_all, *segment_keys)
+        segm_tabs_VBA = xw.utils.to_excel_array(segment_keys)
+        segm_data_VBA = xw.utils.to_excel_array(data_lst_segments)
         if row_found:
-            wb.macro(module_name + ".ImportSegments")(recap_sheet_name, row_found, data_str_segments)
+            wb.macro(module_name + ".ImportSegments")(recap_sheet_name, row_found, segm_tabs_VBA, segm_data_VBA)
         else:
             print(f"File name {fichier} not found in the main excel.")
         close_xlsm(app, wb, xlsm_recap_segments, the_file_exists, is_open, open_all)

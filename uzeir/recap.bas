@@ -1,4 +1,4 @@
-Public Function SearchAndImportData(sheetName As String, columnName As String, data As String) As String
+Public Function SearchAndImportData(sheetName As String, columnName As String, data As String) As Variant
     ' MsgBox "yu"
     Dim ws As Worksheet
     Dim dataArr() As String
@@ -107,3 +107,21 @@ End Function
 Sub MyFunctions(sheetName As String, sheetName2 As String)
     MsgBox "Hello, World!" & sheetName & sheetName2
 End Sub
+
+Function ProcessDictionary(data As Variant) As String
+    Dim i As Long
+    Dim key As String
+    Dim value As String
+    Dim result As String
+    result = ""
+
+    ' Assuming data is a 2D array with key-value pairs
+    For i = LBound(data, 1) To UBound(data, 1)
+        key = data(i, 1)
+        value = data(i, 2)
+        result = result & key & ": " & value & vbNewLine
+    Next i
+
+    ProcessDictionary = result
+End Function
+

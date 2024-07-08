@@ -67,6 +67,21 @@ update_vba_module_from_bas(wb, bas_file_path)
 
 wb.macro("Module1.MyFunctions")("hey", "yi")
 
+# Example dictionary
+data = {
+    "name": "Alice",
+    "age": "30",
+    "city": "New York"
+}
+
+# Convert the dictionary to a 2D array (list of lists)
+data_for_excel = [[k, v] for k, v in data.items()]
+
+
+# Call the VBA function
+result = wb.macro('ProcessDictionary')(data_for_excel)
+
+
 # Save the workbook and close it if it was not already open
 if not the_file_exists:
     wb.save(full_file_path)
