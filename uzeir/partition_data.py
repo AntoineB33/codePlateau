@@ -1,37 +1,88 @@
-import numpy as np
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 
-# Example DataFrame
-data = {
-    'time': np.arange(0, 100, 0.1),
-    'Ptot': np.sin(np.arange(0, 100, 0.1)) + 0.5 * np.random.randn(len(np.arange(0, 100, 0.1))) + 5
-}
-df = pd.DataFrame(data)
+# Generate a simple polynomial in the form of an "M"
+x = np.linspace(0, 10, 100)
+y = -((x - 2)**2 - 4) * ((x - 8)**2 - 4) / 16
 
-def count_intervals(df, height):
-    above = df['Ptot'] > height
-    intervals = (above != above.shift()).cumsum()
-    num_intervals = len(intervals[above].unique())
-    return num_intervals
+# Create the DataFrame
+df = pd.DataFrame({'time': x, 'Ptot': y})
 
-def find_min_height_for_intervals(df, target_intervals, precision=1e-5):
-    low, high = df['Ptot'].min(), df['Ptot'].max()
-    
-    while high - low > precision:
-        mid = (low + high) / 2
-        intervals = count_intervals(df, mid)
-        
-        if intervals >= target_intervals:
-            low = mid
+# Example windows
+windows = [(1, 3), (7, 9)]
+
+# Number of desired intervals
+target_intervals = 2
+
+def count_intervals_above_line(df, height, windows):
+    above_line = df['Ptot'] > height
+    intervals = []
+    in_interval = False
+    start = None
+
+    for i, row in df.iterrows():
+        if above_line[i]:
+            if not in_interval:
+                in_interval = True
+                start = row['time']
         else:
-            high = mid
-            
-    return (low + high) / 2
+            if in_interval:
+                end = row['time']
+                in_interval = False
+                intervals.append((start, end))
+    
+    if in_interval:
+        end = df.iloc[-1]['time']
+        intervals.append((start, end))
 
-# Set the target number of intervals
-target_intervals = 5
+    valid_intervals = []
+    for interval in intervals:
+        for window in windows:
+            if interval[0] <= window[1] and interval[1] >= window[0]:
+                valid_intervals.append(interval)
+                break
 
-# Find the minimum height
-min_height = find_min_height_for_intervals(df, target_intervals)
+    return len(valid_intervals), valid_intervals
 
-print(f"The minimum height for {target_intervals} intervals is: {min_height:.5f}")
+def find_minimum_height(df, target_intervals, windows):
+    unique_heights = sorted(df['Ptot'].unique())
+    low, high = 0, len(unique_heights) - 1
+    result = None
+    valid_intervals = []
+
+    while low <= high:
+        mid = (low + high) // 2
+        height = unique_heights[mid]
+        count, intervals = count_intervals_above_line(df, height, windows)
+
+        if count == target_intervals:
+            result = height
+            valid_intervals = intervals
+            high = mid - 1
+        elif count < target_intervals:
+            high = mid - 1
+        else:
+            low = mid + 1
+
+    return result, valid_intervals
+
+min_height, valid_intervals = find_minimum_height(df, target_intervals, windows)
+print("Minimum height:", min_height)
+
+# Plotting the graph
+plt.figure(figsize=(10, 6))
+plt.plot(df['time'], df['Ptot'], label='Ptot')
+plt.axhline(y=min_height, color='r', linestyle='--', label=f'Minimum height = {min_height}')
+
+for interval in valid_intervals:
+    plt.axvspan(interval[0], interval[1], color='green', alpha=0.3)
+
+for window in windows:
+    plt.axvspan(window[0], window[1], color='blue', alpha=0.2)
+
+plt.xlabel('Time')
+plt.ylabel('Ptot')
+plt.title('Ptot against Time with Valid Intervals and Minimum Height Line')
+plt.legend()
+plt.show()

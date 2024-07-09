@@ -349,6 +349,56 @@ def calculate_work(interval_df):
     
     return work_done
 
+def count_intervals_above_line(df, height, windows):
+    above_line = df['Ptot'] > height
+    intervals = []
+    in_interval = False
+    start = None
+
+    for i, row in df.iterrows():
+        if above_line[i]:
+            if not in_interval:
+                in_interval = True
+                start = row['time']
+        else:
+            if in_interval:
+                end = row['time']
+                in_interval = False
+                intervals.append((start, end))
+    
+    if in_interval:
+        end = df.iloc[-1]['time']
+        intervals.append((start, end))
+
+    valid_intervals = []
+    for interval in intervals:
+        for window in windows:
+            if interval[0] <= window[1] and interval[1] >= window[0]:
+                valid_intervals.append(interval)
+                break
+
+    return len(valid_intervals), valid_intervals
+
+def find_minimum_height(df, target_intervals, windows):
+    unique_heights = sorted(df['Ptot'].unique())
+    low, high = 0, len(unique_heights) - 1
+    valid_intervals = []
+
+    while low <= high:
+        mid = (low + high) // 2
+        height = unique_heights[mid]
+        count, intervals = count_intervals_above_line(df, height, windows)
+
+        if count == target_intervals:
+            valid_intervals = intervals
+            high = mid - 1
+        elif count < target_intervals:
+            high = mid - 1
+        else:
+            low = mid + 1
+
+    return valid_intervals
+
 def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file_PlateauExp = None, startCell_couverts = None, file = None, writeFileNames = False, to_update_excels = True, open_all = True, graph = True):
     global fichier_names
 
@@ -856,6 +906,9 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         recap_excel[fichier]["Duree_segm_inacivite_Min"] = stats["min"]
         recap_excel[fichier]["Duree_segm_inacivite_Max"] = stats["max"]
         recap_excel[fichier]["Duree_segm_inacivite_Sd"] = stats["sd"]
+
+        if file_PlateauExp:
+            valid_intervals = find_minimum_height(df, len(processed_values[fileInd]), merged_windows)
 
         if not graph:
             continue
