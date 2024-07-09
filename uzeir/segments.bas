@@ -1,3 +1,19 @@
+Sub AddScriptingRuntimeReference()
+    Dim ref As Object
+    Dim refName As String
+    refName = "Scripting"
+
+    ' Check if the reference is already added
+    For Each ref In ThisWorkbook.VBProject.References
+        If ref.Name = refName Then
+            Exit Sub
+        End If
+    Next ref
+
+    ' Add the reference
+    ThisWorkbook.VBProject.References.AddFromGuid "{420B2830-E718-11CF-893D-00A0C9054228}", 1, 0
+End Sub
+
 Public Sub ImportSegments(row_found As Variant, tabs As Variant, data As Variant)
 
     Dim xlEdgeLeft As Long
@@ -28,12 +44,14 @@ Public Sub ImportSegments(row_found As Variant, tabs As Variant, data As Variant
     Dim wbs As Object
     Set wbs = CreateObject("Scripting.Dictionary")
     
+    MsgBox "hey"
+    AddScriptingRuntimeReference
     Dim ws As Worksheet
     For Each ws In ThisWorkbook.Worksheets
         wbs(ws.Name) = ws
     Next ws
     
-    For i = LBound(dataRow) To UBound(dataRow)
+    For i = LBound(dataRow) To UBound(dataRow) - 1
         n = CInt(row_found(i, 1))
         For k = LBound(data(i)) To UBound(data(i))
             If tabs(k) = "colors" Then

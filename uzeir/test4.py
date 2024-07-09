@@ -5,6 +5,7 @@ import math
 from plotly.graph_objects import Figure, Scatter
 from tkinter import filedialog, Tk
 from scipy.signal import find_peaks, peak_prominences
+import re
 
 import win32com.client
 import win32api
@@ -16,6 +17,7 @@ import openpyxl
 import xlwings as xw
 
 import matplotlib.pyplot as plt
+import time
 
 """"///////////////////Variables globales///////////////////"""
 poids_min = float("inf")
@@ -37,6 +39,55 @@ module_name = "addData"  # Name for the new module if it needs to be added
 fichier_names=[]
 dataToExcel = []
 recap_sheet_name = "Resultats_merged"
+recap_titles = [
+    "Bouchees",
+    "Proportion_activite",
+    "Duree_activite_min",
+    "Duree_activite_max",
+    "Duree_activite_mean",
+    "Duree_activite_Totale",
+    "Action",
+    "Poids_Conso",
+    "Poids_Moyen",
+    "Poids_Min",
+    "Poids_Max",
+    "Sd_Poids",
+    "Travail_Moyen",
+    "Travail_Min",
+    "Travail_Max",
+    "Sd_Travail",
+    "Force_Max",
+    "Nb_segment_tot",
+    "Nb_segment_bouchee",
+    "Nb_segment_action_sans_bouchee",
+    "Nb_segment_inacivite",
+    "Duree_segm_bouchee_Moyenne",
+    "Duree_segm_bouchee_Min",
+    "Duree_segm_bouchee_Max",
+    "Duree_segm_bouchee_Sd",
+    "Duree_segm_action-b_Moyenne",
+    "Duree_segm_action-b_Min",
+    "Duree_segm_action-b_Max",
+    "Duree_segm_action-b_Sd",
+    "Duree_segm_inacivite_Moyenne",
+    "Duree_segm_inacivite_Min",
+    "Duree_segm_inacivite_Max",
+    "Duree_segm_inacivite_Sd"
+]
+segm_titles = [
+    "duree",
+    "poids",
+    "ecart de temps",
+    "travail",
+    "Force Max",
+    "colors"
+]
+couverts = [
+    "Baguettes",
+    "Piquer",
+    "Ramasser",
+    "Couper"
+]
 """/////////////////////////////////////////////////////////"""
 
 import os
@@ -134,6 +185,7 @@ def open_xlsm(full_file_path, open_all, *sheet_names):
     the_file_exists = True
     if not os.path.exists(full_file_path):
         app = xw.App(visible=open_all)
+        app.books[0].close()
         the_file_exists = False
         wb = app.books.add()
 
@@ -149,26 +201,18 @@ def open_xlsm(full_file_path, open_all, *sheet_names):
                     break
         if not is_open:
             app = xw.App(visible=open_all)
+            app.books[0].close()
             wb = app.books.open(full_file_path)
 
 
     # Add the sheet if it doesn't exist
     for sheet_name in sheet_names:
-        add_sheet_if_not_exists(wb, sheet_name)
-    
-    # Delete the default sheet if is not required
-    if not the_file_exists:
-        for sheet in wb.sheets:
-            if sheet not in sheet_names:
-                sheet.delete()
-                break
-    
-    if open_all and not is_open:
-        wb.window_state = 'maximized'
+        if sheet_name!="colors":
+            add_sheet_if_not_exists(wb, sheet_name)
 
     # Update the VBA module with the code from the .bas file
     bas_file_path = "uzeir\\" + full_file_path.split("\\")[-1].replace('.xlsm', '.bas')
-    update_vba_module_from_bas(wb, bas_file_path, )
+    update_vba_module_from_bas(wb, bas_file_path)
     return app, wb, the_file_exists, is_open
 
 def close_xlsm(app, wb, full_file_path, the_file_exists, is_open, open_all):
@@ -181,8 +225,89 @@ def close_xlsm(app, wb, full_file_path, the_file_exists, is_open, open_all):
         wb.close()
         app.quit()
 
-def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file = None, writeFileNames = False, to_update_excels = True, open_all = True):
+def calculate_statistics(numbers):
+    # Calculate the mean
+    mean = sum(numbers) / len(numbers)
+    
+    # Calculate the minimum
+    min_value = min(numbers)
+    
+    # Calculate the maximum
+    max_value = max(numbers)
+    
+    # Calculate the variance
+    variance = sum((x - mean) ** 2 for x in numbers) / len(numbers)
+    
+    # Calculate the standard deviation
+    standard_deviation = math.sqrt(variance)
+    
+    return {
+        'mean': mean,
+        'min': min_value,
+        'max': max_value,
+        'sd': standard_deviation
+    }
+
+def calculate_work(interval_df):
+    
+    # Convert weight from grams to Newtons
+    interval_df['Ptot'] = interval_df['Ptot'] * 9.81 / 1000
+    
+    # Calculate the average weight (force) in the interval
+    avg_weight = interval_df['Ptot'].mean()
+    
+    # Calculate displacement using trapezoidal rule for integration
+    # Here we assume constant velocity, displacement = velocity * time
+    # For simplicity, assuming unit displacement for each time interval
+    displacement = np.trapz(np.ones_like(interval_df['time']), interval_df['time'])
+    
+    # Work done
+    work_done = avg_weight * displacement
+    
+    return work_done
+
+def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file_PlateauExp, startCell_couverts, file = None, writeFileNames = False, to_update_excels = True, open_all = True):
     global fichier_names
+
+    
+    # Open the workbook
+    app, wb, the_file_exists, is_open = open_xlsm(file_PlateauExp, open_all)
+    # Select the active sheet
+    sheet = wb.sheets[0]
+    # Get the row and column indices from the start cell
+    start_row = sheet.range(startCell_couverts).row
+    start_col = sheet.range(startCell_couverts).column
+    
+    # Read values from the start cell downwards
+    values = []
+    row = start_row
+    while True:
+        cell_value = sheet.range((row, start_col)).value
+        if cell_value is None:
+            break
+        values.append(cell_value)
+        row += 1
+    
+    # Close the workbook
+    close_xlsm(app, wb, file_PlateauExp, the_file_exists, is_open, open_all)
+
+    
+    # Process the values
+    processed_values = []
+    for value in values:
+        # Split the value by "-" or "+"
+        parts = re.split(r'[-+]', value)
+        # Remove any trailing digits
+        cleaned_parts = [re.sub(r'\d+$', '', part) for part in parts]
+        for part in cleaned_parts:
+            if part not in couverts:
+                print(f"{part} n'est pas reconnu à la ligne {row + start_row}")
+                return
+        # Add the cleaned parts as a sublist
+        processed_values.append(cleaned_parts)
+    
+
+
 
     fichiers = []
     for f in os.listdir(dossier):
@@ -528,6 +653,7 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         # else:
         #     activity_time = 0
 
+
         if bouchees:
             # debut_ind = 0
             # while -min_bite_weight < is_bite[debut_ind]:
@@ -553,6 +679,8 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         print(f"Le ratio d'activité est : {ratio}")
         print(f"Le nombre de bouchée pendant le repas est : {bouchees}")
 
+        # for couvert in processed_values[fileInd]:
+        #     fichier += "_" + couvert
         recap_excel[fichier] = dict()
         recap_excel[fichier]["Bouchees"] = bouchees
         recap_excel[fichier]["Proportion_activite"] = round(ratio * 100, 1)
@@ -562,48 +690,35 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         recap_excel[fichier]["Duree_activite_Totale"] = activity_time
         recap_excel[fichier]["Action"] = len(merged_windows)
         recap_excel[fichier]["Poids_Conso"] = poids_consome
-        recap_excel[fichier]["Poids_Moyen"] = temps_repas
-        recap_excel[fichier]["Poids_Min"] = temps_repas
-        recap_excel[fichier]["Poids_Max"] = temps_repas
-        recap_excel[fichier]["Sd_Poids"] = temps_repas
-        recap_excel[fichier]["Travail_Moyen"] = temps_repas
-        recap_excel[fichier]["Travail_Min"] = temps_repas
-        recap_excel[fichier]["Travail_Max"] = temps_repas
-        recap_excel[fichier]["Sd_Travail"] = temps_repas
-        recap_excel[fichier]["Force_Max"] = temps_repas
-        recap_excel[fichier]["Nb_segment_tot"] = temps_repas
-        recap_excel[fichier]["Nb_segment_bouchee"] = temps_repas
-        recap_excel[fichier]["Nb_segment_action_sans_bouchee"] = temps_repas
-        recap_excel[fichier]["Nb_segment_inacivite"] = temps_repas
-        recap_excel[fichier]["Duree_segm_bouchee_Moyenne"] = temps_repas
-        recap_excel[fichier]["Duree_segm_bouchee_Min"] = temps_repas
-        recap_excel[fichier]["Duree_segm_bouchee_Max"] = temps_repas
-        recap_excel[fichier]["Duree_segm_bouchee_Sd"] = temps_repas
-        recap_excel[fichier]["Duree_segm_action-b_Moyenne"] = temps_repas
-        recap_excel[fichier]["Duree_segm_action-b_Min"] = temps_repas
-        recap_excel[fichier]["Duree_segm_action-b_Max"] = temps_repas
-        recap_excel[fichier]["Duree_segm_action-b_Sd"] = temps_repas
-        recap_excel[fichier]["Duree_segm_inacivite_Moyenne"] = temps_repas
-        recap_excel[fichier]["Duree_segm_inacivite_Min"] = temps_repas
-        recap_excel[fichier]["Duree_segm_inacivite_Max"] = temps_repas
-        recap_excel[fichier]["Duree_segm_inacivite_Sd"] = temps_repas
 
+        
         segment_excel[fichier] = dict()
 
         # storing the duration of each action
-        segment_excel[fichier]["duree"] = []
-        segment_excel[fichier]["poids"] = []
-        segment_excel[fichier]["ecart de temps"] = []
-        segment_excel[fichier]["travail"] = []
-        segment_excel[fichier]["Force Max"] = []
-        segment_excel[fichier]["colors"] = []
+        for i in segm_titles:
+            segment_excel[fichier][i] = []
+        poids_bouchees = []
+        travail_bouchees = []
+        force_max = []
+        duree_bouchees = []
+        duree_activitee_sans_b = []
+        duree_inactivitee = []
         for index, window in enumerate(merged_windows):
             segment_excel[fichier]["duree"].append(df["time"].iloc[window[1]] - df["time"].iloc[window[0]])
-            segment_excel[fichier]["poids"].append(df["time"].iloc[window[1]] - df["time"].iloc[window[0]])
             segment_excel[fichier]["ecart de temps"].append(df["time"].iloc[window[1]] - df["time"].iloc[window[0]])
-            segment_excel[fichier]["travail"].append(df["time"].iloc[window[1]] - df["time"].iloc[window[0]])
-            segment_excel[fichier]["Force Max"].append(df["time"].iloc[window[1]] - df["time"].iloc[window[0]])
+            interval = df.iloc[window[0]:window[1]+1]
+            travail_bouchees.append(calculate_work(interval))
+            segment_excel[fichier]["travail"].append(travail_bouchees[-1])
+            force_max.append(interval["Ptot"].max() - df["Ptot"].iloc[window[0]])
+            segment_excel[fichier]["Force Max"].append(force_max[-1])
             segment_excel[fichier]["colors"].append(int(is_bite[index] <= -min_bite_weight))
+            if segment_excel[fichier]["colors"][index]:
+                segment_excel[fichier]["poids"].append(-is_bite[index])
+                poids_bouchees.append(-is_bite[index])
+                duree_bouchees.append(segment_excel[fichier]["duree"][-1])
+            else:
+                segment_excel[fichier]["poids"].append(0)
+                duree_activitee_sans_b.append(segment_excel[fichier]["duree"][-1])
             if index + 1 < len(merged_windows):
                 diff = df["time"].iloc[merged_windows[index + 1][0]] - df["time"].iloc[window[1]]
                 if diff:
@@ -613,6 +728,38 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                     segment_excel[fichier]["travail"].append(0)
                     segment_excel[fichier]["Force Max"].append(0)
                     segment_excel[fichier]["colors"].append(2)
+                    duree_inactivitee.append(diff)
+                
+        stats = calculate_statistics(poids_bouchees)
+        recap_excel[fichier]["Poids_Moyen"] = stats["mean"]
+        recap_excel[fichier]["Poids_Min"] = stats["min"]
+        recap_excel[fichier]["Poids_Max"] = stats["max"]
+        recap_excel[fichier]["Sd_Poids"] = stats["sd"]
+        stats = calculate_statistics(travail_bouchees)
+        recap_excel[fichier]["Travail_Moyen"] = stats["mean"]
+        recap_excel[fichier]["Travail_Min"] = stats["min"]
+        recap_excel[fichier]["Travail_Max"] = stats["max"]
+        recap_excel[fichier]["Sd_Travail"] = stats["sd"]
+        recap_excel[fichier]["Force_Max"] = max(force_max)
+        recap_excel[fichier]["Nb_segment_tot"] = len(merged_windows)
+        recap_excel[fichier]["Nb_segment_bouchee"] = len(duree_bouchees)
+        recap_excel[fichier]["Nb_segment_action_sans_bouchee"] = len(duree_activitee_sans_b)
+        recap_excel[fichier]["Nb_segment_inacivite"] = len(duree_inactivitee)
+        stats = calculate_statistics(duree_bouchees)
+        recap_excel[fichier]["Duree_segm_bouchee_Moyenne"] = stats["mean"]
+        recap_excel[fichier]["Duree_segm_bouchee_Min"] = stats["min"]
+        recap_excel[fichier]["Duree_segm_bouchee_Max"] = stats["max"]
+        recap_excel[fichier]["Duree_segm_bouchee_Sd"] = stats["sd"]
+        stats = calculate_statistics(duree_activitee_sans_b)
+        recap_excel[fichier]["Duree_segm_action-b_Moyenne"] = stats["mean"]
+        recap_excel[fichier]["Duree_segm_action-b_Min"] = stats["min"]
+        recap_excel[fichier]["Duree_segm_action-b_Max"] = stats["max"]
+        recap_excel[fichier]["Duree_segm_action-b_Sd"] = stats["sd"]
+        stats = calculate_statistics(duree_inactivitee)
+        recap_excel[fichier]["Duree_segm_inacivite_Moyenne"] = stats["mean"]
+        recap_excel[fichier]["Duree_segm_inacivite_Min"] = stats["min"]
+        recap_excel[fichier]["Duree_segm_inacivite_Max"] = stats["max"]
+        recap_excel[fichier]["Duree_segm_inacivite_Sd"] = stats["sd"]
 
         # Création de graphiques avec Plotly
         fig = Figure()
@@ -720,44 +867,48 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         features_df.to_csv("bite_features.csv", index=False)
 
     if to_update_excels:
+        # new_fichier_names = []
+        # for fileInd, fichier in enumerate(fichier_names):
+        #     for couvert in processed_values[fileInd]:
+        #         new_fichier_names.append(fichier + "_" + couvert)
+        # fichier_names = new_fichier_names
         fichier_names_rows = [name + date_folder for name in fichier_names]
-
 
 
         fills = [str(rgb_to_bgr(color)) for color in [activityWithoutBite_bgColor, activityWithBite_bgColor, noActivity_bgColor]]
         
         app, wb, the_file_exists, is_open = open_xlsm(xlsm_recap, open_all, recap_sheet_name)
 
+
+
         if writeFileNames:
-            wb.macro(module_name + ".allFileName")(recap_sheet_name, dossier)
+            wb.macro(module_name + ".allFileName")(recap_sheet_name, fichier_names_rows)
 
             
         data_lst = []
         data_lst_segments = []
-        if fichier_names_rows:
-            recap_keys = sorted(recap_excel[fichier].keys())
-            segment_keys = sorted(segment_excel[fichier].keys())
         for fileInd, fichier in enumerate(fichier_names_rows):
             data_lst.append([fichier])
             data_lst_segments.append([])
             # loop throught the keys of new_excel
-            for key in recap_keys:
+            for key in recap_titles:
                 data_lst[fileInd].append(str(recap_excel[fichier_names[fileInd]][key]))
-            for key in segment_keys:
+            for key in segm_titles:
+                data_lst_segments[fileInd].append([])
                 for window in segment_excel[fichier_names[fileInd]][key]:
-                    data_lst_segments[fileInd][-1].append(str(round(window, 1)))
-        recap_tabs_VBA = xw.utils.to_excel_array(recap_keys)
-        recap_data_VBA = xw.utils.to_excel_array(data_lst)
-        row_found = wb.macro(module_name + ".SearchAndImportData")(recap_sheet_name, "A", recap_tabs_VBA, recap_data_VBA)
+                    if key == "colors":
+                        data_lst_segments[fileInd][-1].append(fills[window])
+                    else:
+                        data_lst_segments[fileInd][-1].append(str(round(window, 1)))
+        row_found = wb.macro(module_name + ".SearchAndImportData")(recap_sheet_name, "A", recap_titles, data_lst)
         close_xlsm(app, wb, xlsm_recap, the_file_exists, is_open, open_all)
-        app, wb, the_file_exists, is_open = open_xlsm(xlsm_recap_segments, open_all, *segment_keys)
-        segm_tabs_VBA = xw.utils.to_excel_array(segment_keys)
-        segm_data_VBA = xw.utils.to_excel_array(data_lst_segments)
-        if row_found:
-            wb.macro(module_name + ".ImportSegments")(recap_sheet_name, row_found, segm_tabs_VBA, segm_data_VBA)
-        else:
-            print(f"File name {fichier} not found in the main excel.")
-        close_xlsm(app, wb, xlsm_recap_segments, the_file_exists, is_open, open_all)
+        # app, wb, the_file_exists, is_open = open_xlsm(xlsm_recap_segments, open_all, *segm_titles)
+        # if row_found:
+        #     data_lst_segments.append([])
+        #     wb.macro(module_name + ".ImportSegments")(row_found, segm_titles, data_lst_segments)
+        # else:
+        #     print(f"File name {fichier} not found in the main excel.")
+        # close_xlsm(app, wb, xlsm_recap_segments, the_file_exists, is_open, open_all)
 
     # def analyseAI():
         
@@ -806,8 +957,8 @@ sheet_name_segment = "Feuil1"
 
 
 
-path = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer(pate a modeler)\A envoyer"
-# path = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine(non corrompue)\A envoyer"
+# path = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer(pate a modeler)\A envoyer"
+path = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine(non corrompue)\A envoyer"
 date_folder = ""
 
 path += "\\"
@@ -819,8 +970,10 @@ dossier_recap_segments = path + r"recap\segments.xlsm"
 
 # convert_csv_to_xlsx(path + "Expériences plateaux", dossier)
 
-find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file = "180624_Dorian_Laura_P1.xlsx", writeFileNames = True)
+file_PlateauExp = "PlateauxExp.xlsx"
+file_PlateauExp = "Plateaux_Exp.xlsx"
+startCell_couverts = "F4"
+startCell_couverts = "E4"
+
+find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "180624_Dorian_Laura_P1.xlsx", writeFileNames = True)
 # find_bites(dossier, dossier_graphique, date_folder, "14_05_Benjamin.xlsx")
-
-
-open_all = False

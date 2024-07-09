@@ -1,9 +1,6 @@
-Public Function SearchAndImportData(sheetName As String, columnName As String, data As String) As Variant
-    ' MsgBox "yu"
+Public Function SearchAndImportData(sheetName As String, columnName As String, tabs As Variant, data As Variant) As Variant
     Dim ws As Worksheet
-    Dim dataArr() As String
     Dim i As Integer
-    Dim cellData() As String
     Dim searchRange As Range
     Dim found As Range
 
@@ -12,34 +9,38 @@ Public Function SearchAndImportData(sheetName As String, columnName As String, d
     
     Dim startCol As Integer
     If columnName = "A" Then
-        startCol = 7
+        startCol = 1
     Else
         startCol = 10
     End If
     
-    Dim result As String
-    dataArr = Split(data, ";")
-    ' MsgBox "yi"
-    For i = LBound(dataArr) To UBound(dataArr)
-        cellData = Split(dataArr(i), ":")
+    For i = LBound(tabs) To UBound(tabs)
+        ws.Cells(1, i + startCol + 1).Value = tabs(i)
+    Next i
+    
+    Dim result() As Variant
+    ReDim result(LBound(data) To UBound(data), 1 To 2)
+
+    For i = LBound(data) To UBound(data)
 
         ' Search for the name in the specified column
-        Set found = searchRange.Find(What:=cellData(LBound(cellData)), LookIn:=xlValues, LookAt:=xlWhole)
+        result(i, 1) = data(i, LBound(tabs))
+        Set found = searchRange.Find(What:=result(i, 1), LookIn:=xlValues, LookAt:=xlWhole)
         
         If Not found Is Nothing Then
             ' Name found, process the data
             
-            For j = LBound(cellData) + 1 To UBound(cellData)
+            For j = LBound(data, 2) + 1 To UBound(data, 2)
                 ' Write the value in the corresponding cell in the same row
-                ws.Cells(found.row, startCol + j).Value = cellData(j)
+                ws.Cells(found.row, startCol + j).value = data(i, j)
             Next j
-            result = result & cellData(LBound(cellData)) & ":" & found.row & ";"
+            result(i, 2) = found.row
         Else
-            result = result & cellData(LBound(cellData)) & ":-1;"
+            result(i, 2) = -1
         End If
     Next i
     ' MsgBox SearchAndImportData
-    SearchAndImportData = Left(result, Len(result) - 1)
+    SearchAndImportData = result
 End Function
 
 Public Function SearchAndImportData2(sheetName As String, columnName As String, data As String) As String
@@ -50,7 +51,21 @@ Public Function test4() As String
     test4 = "hey there"
 End Function
 
-Sub allFileName(sheetName As String, folderPath As String)
+Sub allFileName(sheetName As String, file_names As Variant)
+    Dim ws As Worksheet
+    Dim i As Long
+    
+    ' Set the worksheet
+    Set ws = ThisWorkbook.Sheets(sheetName)
+    
+    ' Loop through the file_names array and write to the first column starting from the second row
+    For i = LBound(file_names) To UBound(file_names)
+        ws.Cells(i + 2, 1).Value = file_names(i)
+    Next i
+End Sub
+
+
+Sub allFileName2(sheetName As String, file_names As Variant)
     ' MsgBox "yo"
     Dim fileName As String
     Dim ws As Worksheet
@@ -70,7 +85,7 @@ Sub allFileName(sheetName As String, folderPath As String)
     ' Loop through all files in the folder
     Do While fileName <> ""
         ' Write the file name in the first column of the current row
-        ws.Cells(row, 1).Value = Left(fileName, InStrRev(fileName, ".") - 1)
+        ws.Cells(row, 1).value = Left(fileName, InStrRev(fileName, ".") - 1)
         
         ' Move to the next row
         row = row + 1
@@ -104,8 +119,8 @@ End Sub
 Function MyFunction()
     MsgBox "Hello, World!"
 End Function
-Sub MyFunctions(sheetName As String, sheetName2 As String)
-    MsgBox "Hello, World!" & sheetName & sheetName2
+Sub MyFunctions(data As Variant)
+    MsgBox "Hello, World!" & LBound(data(0))
 End Sub
 
 Function ProcessDictionary(data As Variant) As String
@@ -124,4 +139,17 @@ Function ProcessDictionary(data As Variant) As String
 
     ProcessDictionary = result
 End Function
+
+Public Sub func2(dataList As Variant)
+    Dim ws As Worksheet
+    Dim i As Integer
+    Dim sublist As Variant
+    
+    Set ws = ThisWorkbook.Sheets("MySheet")
+    
+    ' Loop through each sublist in the array
+    For i = LBound(dataList) To UBound(dataList)
+        MsgBox "Size of sublist " & i + 1 & ": " & UBound(dataList(i)) - LBound(dataList(i)) + 1
+    Next i
+End Sub
 

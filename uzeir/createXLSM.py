@@ -30,7 +30,7 @@ def update_vba_module_from_bas(wb, bas_file_path, module_name="Module1"):
     module.CodeModule.AddFromString(vba_code)
 
 # File name and sheet name
-open_all = False
+open_all = True
 file_name = 'sample2.xlsm'
 full_file_path = os.path.abspath(file_name)  # Get the absolute path to the file
 recap_folder = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\uzeir" + "\\"
@@ -41,6 +41,7 @@ full_file_path = recap_folder + file_name
 the_file_exists = True
 if not os.path.exists(full_file_path):
     app = xw.App(visible=open_all)
+    app.books[0].close()
     the_file_exists = False
     wb = app.books.add()
 
@@ -56,8 +57,8 @@ if the_file_exists:
                 break
     if not is_open:
         app = xw.App(visible=open_all)
+        app.books[0].close()
         wb = app.books.open(full_file_path)
-
 
 # Add the sheet if it doesn't exist
 add_sheet_if_not_exists(wb, sheet_name)
@@ -65,21 +66,17 @@ add_sheet_if_not_exists(wb, sheet_name)
 # Update the VBA module with the code from the .bas file
 update_vba_module_from_bas(wb, bas_file_path)
 
-wb.macro("Module1.MyFunctions")("hey", "yi")
 
-# Example dictionary
-data = {
-    "name": "Alice",
-    "age": "30",
-    "city": "New York"
-}
+data_lst = [
+]
+data_lst.append([1,2,3])
+data_lst.append([])
 
-# Convert the dictionary to a 2D array (list of lists)
-data_for_excel = [[k, v] for k, v in data.items()]
+row_found = wb.macro('Module1.func2')(data_lst)
 
 
 # Call the VBA function
-result = wb.macro('ProcessDictionary')(data_for_excel)
+# result = wb.macro('ProcessDictionary')(data_for_excel)
 
 
 # Save the workbook and close it if it was not already open
