@@ -187,6 +187,7 @@ def open_xlsm(full_file_path, open_all, *sheet_names):
     the_file_exists = True
     if not os.path.exists(full_file_path):
         app = xw.App(visible=open_all)
+        time.sleep(1)
         app.books[0].close()
         the_file_exists = False
         wb = app.books.add()
@@ -203,8 +204,11 @@ def open_xlsm(full_file_path, open_all, *sheet_names):
                     break
         if not is_open:
             app = xw.App(visible=open_all)
+            time.sleep(3)
             app.books[0].close()
+            time.sleep(3)
             wb = app.books.open(full_file_path)
+            time.sleep(3)
 
 
     # Add the sheet if it doesn't exist
@@ -271,6 +275,12 @@ def calculate_work(interval_df):
 
 def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file_PlateauExp, startCell_couverts, file = None, writeFileNames = False, to_update_excels = True, open_all = True):
     global fichier_names
+
+    
+    app, wb, the_file_exists, is_open = open_xlsm(xlsm_recap, open_all, recap_sheet_name)
+    # close
+    close_xlsm(app, wb, xlsm_recap, the_file_exists, is_open, open_all)
+    return
 
     
     # Open the workbook
@@ -973,6 +983,7 @@ file_PlateauExp = "PlateauxExp.xlsx"
 file_PlateauExp = "Plateaux_Exp.xlsx"
 startCell_couverts = "F4"
 startCell_couverts = "E4"
+
 
 # find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "180624_Dorian_Laura_P1.xlsx", writeFileNames = True)
 # find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Benjamin_Roxane_P1.xlsx", writeFileNames = True)
