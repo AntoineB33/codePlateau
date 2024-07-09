@@ -119,9 +119,10 @@ End Sub
 Function MyFunction()
     MsgBox "Hello, World!"
 End Function
-Sub MyFunctions(data As Variant)
-    MsgBox "Hello, World!" & LBound(data(0))
-End Sub
+Function MyFunctions(data As Variant) As Variant
+    MsgBox "Hello, World!" & UBound(data(0))
+    MyFunctions = data
+End Function
 
 Function ProcessDictionary(data As Variant) As String
     Dim i As Long

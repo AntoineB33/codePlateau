@@ -19,6 +19,8 @@ import xlwings as xw
 import matplotlib.pyplot as plt
 import time
 
+import win32com.client as win32
+
 """"///////////////////Variables globales///////////////////"""
 poids_min = float("inf")
 debut_ind = 0
@@ -149,12 +151,12 @@ def convert_csv_to_xlsx(folder_path, xlsx_folder_path=""):
                 # print(f"Converted '{file}' column '{col}' to '{new_file_path}'")
 
 # Function to add or update the sheet if it doesn't exist
-def add_sheet_if_not_exists(wb, sheet_name):
+def add_sheet_if_not_exists2(wb, sheet_name):
     if sheet_name not in [sheet.name for sheet in wb.sheets]:
         wb.sheets.add(sheet_name)
 
 # Function to update VBA module with code from .bas file
-def update_vba_module_from_bas(wb, bas_file_path):
+def update_vba_module_from_bas2(wb, bas_file_path):
     # Read the .bas file contents
     with open(bas_file_path, 'r') as file:
         vba_code = file.read()
@@ -183,7 +185,69 @@ def rgb_to_bgr(rgb_color):
     bgr_color = (blue << 16) | (green << 8) | red
     return bgr_color
 
-def open_xlsm(full_file_path, open_all, *sheet_names):
+def ensure_sheets_exist(workbook, *sheet_names):
+    for sheet_name in sheet_names:
+        sheet_exists = False
+        for sheet in workbook.Sheets:
+            if sheet.Name == sheet_name:
+                sheet_exists = True
+                break
+        if not sheet_exists:
+            workbook.Sheets.Add().Name = sheet_name
+            
+def update_vba_module_from_bas(workbook, module_name, bas_file_path):
+    with open(bas_file_path, 'r') as file:
+        bas_code = file.read()
+
+    vb_component = None
+    for vb_comp in workbook.VBProject.VBComponents:
+        if vb_comp.Name == module_name:
+            vb_component = vb_comp
+            break
+    
+    if vb_component is None:
+        vb_component = workbook.VBProject.VBComponents.Add(1)
+        vb_component.Name = module_name
+    
+    vb_component.CodeModule.DeleteLines(1, vb_component.CodeModule.CountOfLines)
+    vb_component.CodeModule.AddFromString(bas_code)
+
+def open_xlsm(full_file_path, module_name, *sheet_names):
+    # def execute_vba_function(filename, vba_function_name, bas_file_path, module_name, open_all=False):
+    # Initialize Excel application
+    excel = win32.Dispatch('Excel.Application')
+
+    # Check if the file exists, if not, create it
+    if not os.path.exists(full_file_path):
+        workbook = excel.Workbooks.Add()
+        workbook.SaveAs(full_file_path, FileFormat=52)
+        file_existed = False
+    else:
+        file_existed = True
+
+    # Check if the file is already open
+    workbook_open = False
+    if file_existed:
+        for wb in excel.Workbooks:
+            if wb.FullName == full_file_path:
+                workbook_open = True
+                workbook = wb
+                break
+
+    # If the workbook is not already open, open it
+    if not workbook_open:
+        workbook = excel.Workbooks.Open(full_file_path)
+
+    ensure_sheets_exist(workbook, *sheet_names)
+        
+    if sheet_names:
+        # Update the VBA module with the code from the .bas file
+        bas_file_path = "uzeir\\" + full_file_path.split("\\")[-1].replace('.xlsm', '.bas')
+        update_vba_module_from_bas(workbook, module_name, bas_file_path)
+
+    return excel, workbook, workbook_open
+
+def open_xlsm2(full_file_path, open_all, *sheet_names):
     the_file_exists = True
     if not os.path.exists(full_file_path):
         app = xw.App(visible=open_all)
@@ -222,7 +286,20 @@ def open_xlsm(full_file_path, open_all, *sheet_names):
         update_vba_module_from_bas(wb, bas_file_path)
     return app, wb, the_file_exists, is_open
 
-def close_xlsm(app, wb, full_file_path, the_file_exists, is_open, open_all):
+
+def close_xlsm(excel, workbook, workbook_open, open_all):
+    # Save the workbook
+    workbook.Save()
+
+    # Close the workbook if it wasn't open before, unless open_all is True
+    if not workbook_open and not open_all:
+        workbook.Close()
+
+    # Make Excel visible if open_all is True
+    if open_all:
+        excel.Visible = True
+
+def close_xlsm2(app, wb, full_file_path, the_file_exists, is_open, open_all):
     # Save the workbook and close it if it was not already open
     if not the_file_exists:
         wb.save(full_file_path)
@@ -256,12 +333,11 @@ def calculate_statistics(numbers):
     }
 
 def calculate_work(interval_df):
-    
-    # Convert weight from grams to Newtons
-    interval_df['Ptot'] = interval_df['Ptot'] * 9.81 / 1000
+    # Create a copy of the 'Ptot' column to avoid modifying the original DataFrame
+    Ptot_converted = interval_df['Ptot'] * 9.81 / 1000
     
     # Calculate the average weight (force) in the interval
-    avg_weight = interval_df['Ptot'].mean()
+    avg_weight = Ptot_converted.mean()
     
     # Calculate displacement using trapezoidal rule for integration
     # Here we assume constant velocity, displacement = velocity * time
@@ -273,51 +349,48 @@ def calculate_work(interval_df):
     
     return work_done
 
-def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file_PlateauExp, startCell_couverts, file = None, writeFileNames = False, to_update_excels = True, open_all = True):
+def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file_PlateauExp = None, startCell_couverts = None, file = None, writeFileNames = False, to_update_excels = True, open_all = True, graph = True):
     global fichier_names
 
-    
-    app, wb, the_file_exists, is_open = open_xlsm(xlsm_recap, open_all, recap_sheet_name)
-    # close
-    close_xlsm(app, wb, xlsm_recap, the_file_exists, is_open, open_all)
-    return
+    if file_PlateauExp:
+        # Open the workbook
+        excel, workbook, workbook_open = open_xlsm(file_PlateauExp, module_name)
+        
+        sheet = workbook.Sheets(1)
+        # start_range = sheet.Range(startCell_couverts)
+        values = []
+        # current_cell = start_range
 
-    
-    # Open the workbook
-    app, wb, the_file_exists, is_open = open_xlsm(file_PlateauExp, open_all)
-    # Select the active sheet
-    sheet = wb.sheets[0]
-    # Get the row and column indices from the start cell
-    start_row = sheet.range(startCell_couverts).row
-    start_col = sheet.range(startCell_couverts).column
-    
-    # Read values from the start cell downwards
-    values = []
-    row = start_row
-    while True:
-        cell_value = sheet.range((row, start_col)).value
-        if cell_value is None:
-            break
-        values.append(cell_value)
-        row += 1
-    
-    # Close the workbook
-    close_xlsm(app, wb, file_PlateauExp, the_file_exists, is_open, open_all)
 
-    
-    # Process the values
-    processed_values = []
-    for value in values:
-        # Split the value by "-" or "+"
-        parts = re.split(r'[-+]', value)
-        # Remove any trailing digits
-        cleaned_parts = [re.sub(r'\d+$', '', part) for part in parts]
-        for part in cleaned_parts:
-            if part not in couverts:
-                print(f"{part} n'est pas reconnu à la ligne {row + start_row}")
-                return
-        # Add the cleaned parts as a sublist
-        processed_values.append(cleaned_parts)
+        
+
+        # Read cells from the start cell downwards until an empty cell is encountered
+        row_number = sheet.Range(startCell_couverts).Row
+        column_number = sheet.Range(startCell_couverts).Column
+        while True:
+            cell_value = sheet.Cells(row_number, column_number).Value
+            if cell_value is None:
+                break
+            values.append(cell_value)
+            row_number += 1
+        
+        # Close the workbook
+        close_xlsm(excel, workbook, workbook_open, open_all)
+
+        
+        # Process the values
+        processed_values = []
+        for row, value in enumerate(values):
+            # Split the value by "-" or "+"
+            parts = re.split(r'[-+]', value)
+            # Remove any trailing digits
+            cleaned_parts = [re.sub(r'\d+$', '', part).strip() for part in parts]
+            for part in cleaned_parts:
+                if part not in couverts:
+                    print(f"{part} n'est pas reconnu à la ligne {row + sheet.Range(startCell_couverts).Row}.")
+                    return
+            # Add the cleaned parts as a sublist
+            processed_values.append(cleaned_parts)
     
 
 
@@ -404,6 +477,16 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         
     # Traitement des fichiers
     for fileInd, fichier in enumerate(fichier_names):
+        
+        # recap_excel[fichier] = dict()
+        # segment_excel[fichier] = dict()
+        # for i in recap_titles:
+        #     recap_excel[fichier][i] = 0
+        # for i in segm_titles:
+        #     segment_excel[fichier][i] = []
+        # continue
+
+
         print(fichier)
         df = pd.read_excel(fichiers[fileInd], usecols=[0, 1])
         df.columns = ["time", "Ptot"]
@@ -774,6 +857,9 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         recap_excel[fichier]["Duree_segm_inacivite_Max"] = stats["max"]
         recap_excel[fichier]["Duree_segm_inacivite_Sd"] = stats["sd"]
 
+        if not graph:
+            continue
+
         # Création de graphiques avec Plotly
         fig = Figure()
         fig.update_layout(
@@ -889,13 +975,6 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
 
 
         fills = [str(rgb_to_bgr(color)) for color in [activityWithoutBite_bgColor, activityWithBite_bgColor, noActivity_bgColor]]
-        
-        app, wb, the_file_exists, is_open = open_xlsm(xlsm_recap, open_all, recap_sheet_name)
-
-
-
-        if writeFileNames:
-            wb.macro(module_name + ".allFileName")(recap_sheet_name, fichier_names_rows)
 
             
         data_lst = []
@@ -906,23 +985,27 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                 data_lst_segments.append([])
                 # loop throught the keys of new_excel
                 for key in recap_titles:
-                    data_lst[fileInd].append(str(recap_excel[fichier_names[fileInd]][key]))
+                    data_lst[-1].append(str(recap_excel[fichier_names[fileInd]][key]))
                 for key in segm_titles:
-                    data_lst_segments[fileInd].append([])
+                    data_lst_segments[-1].append([])
                     for window in segment_excel[fichier_names[fileInd]][key]:
                         if key == "colors":
-                            data_lst_segments[fileInd][-1].append(fills[window])
+                            data_lst_segments[-1][-1].append(fills[window])
                         else:
-                            data_lst_segments[fileInd][-1].append(str(round(window, 1)))
-        row_found = wb.macro(module_name + ".SearchAndImportData")(recap_sheet_name, "A", recap_titles, data_lst)
-        close_xlsm(app, wb, xlsm_recap, the_file_exists, is_open, open_all)
-        # app, wb, the_file_exists, is_open = open_xlsm(xlsm_recap_segments, open_all, *segm_titles)
+                            data_lst_segments[-1][-1].append(str(round(window, 1)))
+        
+        excel, workbook, workbook_open = open_xlsm(xlsm_recap, module_name, recap_sheet_name)
+        if writeFileNames:
+            excel.Application.Run(f'{workbook.Name}!allFileName', recap_sheet_name, fichier_names_rows)
+        row_found = excel.Application.Run(f'{workbook.Name}!SearchAndImportData', recap_sheet_name, "A", recap_titles, data_lst)
+        close_xlsm(excel, workbook, workbook_open, open_all)
+        # excel, workbook, workbook_open = open_xlsm(xlsm_recap_segments, module_name, *segm_titles)
         # if row_found:
         #     data_lst_segments.append([])
         #     wb.macro(module_name + ".ImportSegments")(row_found, segm_titles, data_lst_segments)
         # else:
         #     print(f"File name {fichier} not found in the main excel.")
-        # close_xlsm(app, wb, xlsm_recap_segments, the_file_exists, is_open, open_all)
+        # close_xlsm(excel, workbook, workbook_open, open_all)
 
     # def analyseAI():
         
@@ -979,13 +1062,13 @@ dossier_recap_segments = path + r"recap\segments.xlsm"
 
 convert_csv_to_xlsx(path + "Expériences plateaux", dossier)
 
-file_PlateauExp = "PlateauxExp.xlsx"
 file_PlateauExp = "Plateaux_Exp.xlsx"
+file_PlateauExp = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine(non corrompue)\A envoyer\Plateaux_Exp.xlsx"
 startCell_couverts = "F4"
 startCell_couverts = "E4"
 
 
 # find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "180624_Dorian_Laura_P1.xlsx", writeFileNames = True)
 # find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Benjamin_Roxane_P1.xlsx", writeFileNames = True)
-find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, writeFileNames = True)
+find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, writeFileNames = True, graph = False)
 # find_bites(dossier, dossier_graphique, date_folder, "14_05_Benjamin.xlsx")
