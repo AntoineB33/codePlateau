@@ -95,6 +95,8 @@ import pandas as pd
 
 def convert_csv_to_xlsx(folder_path, xlsx_folder_path=""):
     # List all files in the given folder
+    files = [file for file in os.listdir("C:\\Users\\abarb\\Documents\\travail\\stage et4\\travail\\codePlateau\\data\\A envoyer_antoine(non corrompue)\\A envoyer\\Expériences plateaux") if file.endswith(".csv") or file.endswith(".CSV")]
+    folder_path == "C:\\Users\\abarb\\Documents\\travail\\stage et4\\travail\\codePlateau\\data\\A envoyer_antoine(non corrompue)\\A envoyer\\Expériences plateaux"
     files = [file for file in os.listdir(folder_path) if file.endswith(".csv") or file.endswith(".CSV")]
 
     # Process each file
@@ -210,9 +212,10 @@ def open_xlsm(full_file_path, open_all, *sheet_names):
         if sheet_name!="colors":
             add_sheet_if_not_exists(wb, sheet_name)
 
-    # Update the VBA module with the code from the .bas file
-    bas_file_path = "uzeir\\" + full_file_path.split("\\")[-1].replace('.xlsm', '.bas')
-    update_vba_module_from_bas(wb, bas_file_path)
+    if sheet_names:
+        # Update the VBA module with the code from the .bas file
+        bas_file_path = "uzeir\\" + full_file_path.split("\\")[-1].replace('.xlsm', '.bas')
+        update_vba_module_from_bas(wb, bas_file_path)
     return app, wb, the_file_exists, is_open
 
 def close_xlsm(app, wb, full_file_path, the_file_exists, is_open, open_all):
@@ -712,7 +715,7 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
             force_max.append(interval["Ptot"].max() - df["Ptot"].iloc[window[0]])
             segment_excel[fichier]["Force Max"].append(force_max[-1])
             segment_excel[fichier]["colors"].append(int(is_bite[index] <= -min_bite_weight))
-            if segment_excel[fichier]["colors"][index]:
+            if segment_excel[fichier]["colors"][-1]:
                 segment_excel[fichier]["poids"].append(-is_bite[index])
                 poids_bouchees.append(-is_bite[index])
                 duree_bouchees.append(segment_excel[fichier]["duree"][-1])
@@ -888,18 +891,19 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         data_lst = []
         data_lst_segments = []
         for fileInd, fichier in enumerate(fichier_names_rows):
-            data_lst.append([fichier])
-            data_lst_segments.append([])
-            # loop throught the keys of new_excel
-            for key in recap_titles:
-                data_lst[fileInd].append(str(recap_excel[fichier_names[fileInd]][key]))
-            for key in segm_titles:
-                data_lst_segments[fileInd].append([])
-                for window in segment_excel[fichier_names[fileInd]][key]:
-                    if key == "colors":
-                        data_lst_segments[fileInd][-1].append(fills[window])
-                    else:
-                        data_lst_segments[fileInd][-1].append(str(round(window, 1)))
+            if fichier_names[fileInd] in recap_excel:
+                data_lst.append([fichier])
+                data_lst_segments.append([])
+                # loop throught the keys of new_excel
+                for key in recap_titles:
+                    data_lst[fileInd].append(str(recap_excel[fichier_names[fileInd]][key]))
+                for key in segm_titles:
+                    data_lst_segments[fileInd].append([])
+                    for window in segment_excel[fichier_names[fileInd]][key]:
+                        if key == "colors":
+                            data_lst_segments[fileInd][-1].append(fills[window])
+                        else:
+                            data_lst_segments[fileInd][-1].append(str(round(window, 1)))
         row_found = wb.macro(module_name + ".SearchAndImportData")(recap_sheet_name, "A", recap_titles, data_lst)
         close_xlsm(app, wb, xlsm_recap, the_file_exists, is_open, open_all)
         # app, wb, the_file_exists, is_open = open_xlsm(xlsm_recap_segments, open_all, *segm_titles)
@@ -950,11 +954,6 @@ date_folder = "_28_05_24"
 
 
 
-excel_all_path = r".\data\benjamin_2_csv\Tableau récapitulatif - new algo"
-excel_segments_path = r".\data\benjamin_2_csv\durée_segments"
-recap_sheet_name = "Resultats_merged"
-sheet_name_segment = "Feuil1"
-
 
 
 # path = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer(pate a modeler)\A envoyer"
@@ -968,12 +967,14 @@ dossier_recap = path + r"recap\recap.xlsm"
 dossier_recap_segments = path + r"recap\segments.xlsm"
 
 
-# convert_csv_to_xlsx(path + "Expériences plateaux", dossier)
+convert_csv_to_xlsx(path + "Expériences plateaux", dossier)
 
 file_PlateauExp = "PlateauxExp.xlsx"
 file_PlateauExp = "Plateaux_Exp.xlsx"
 startCell_couverts = "F4"
 startCell_couverts = "E4"
 
-find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "180624_Dorian_Laura_P1.xlsx", writeFileNames = True)
+# find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "180624_Dorian_Laura_P1.xlsx", writeFileNames = True)
+# find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Benjamin_Roxane_P1.xlsx", writeFileNames = True)
+find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, writeFileNames = True)
 # find_bites(dossier, dossier_graphique, date_folder, "14_05_Benjamin.xlsx")
