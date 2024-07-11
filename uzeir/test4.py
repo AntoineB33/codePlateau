@@ -7,12 +7,8 @@ from tkinter import filedialog, Tk
 from scipy.signal import find_peaks, peak_prominences
 import re
 
-import win32com.client
-import win32api
-
 from scipy.fft import fft
 
-import os
 import openpyxl
 import xlwings as xw
 
@@ -20,6 +16,15 @@ import matplotlib.pyplot as plt
 import time
 
 import win32com.client as win32
+
+# to normalize and reshape
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+# Build and Train the CNN Model
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense
+from tensorflow.keras.utils import to_categorical
 
 """"///////////////////Variables globales///////////////////"""
 poids_min = float("inf")
@@ -92,8 +97,6 @@ couverts = [
 ]
 """/////////////////////////////////////////////////////////"""
 
-import os
-import pandas as pd
 
 def convert_csv_to_xlsx(folder_path, xlsx_folder_path=""):
     # List all files in the given folder
@@ -399,6 +402,134 @@ def find_minimum_height(df, target_intervals, windows):
 
     return valid_intervals
 
+
+def count_intervals_above_line(df, height, windows):
+    above_line = df['Ptot'] > height
+    intervals = []
+    in_interval = False
+    start = None
+
+    for i, row in df.iterrows():
+        if above_line[i]:
+            if not in_interval:
+                in_interval = True
+                start = row['time']
+        else:
+            if in_interval:
+                end = row['time']
+                in_interval = False
+                intervals.append((start, end))
+    
+    if in_interval:
+        end = df.iloc[-1]['time']
+        intervals.append((start, end))
+
+    valid_intervals = []
+    for interval in intervals:
+        interval_start_index = df[df['time'] == interval[0]].index[0]
+        interval_end_index = df[df['time'] == interval[1]].index[0]
+        for window in windows:
+            if interval_start_index <= window[1] and interval_end_index >= window[0]:
+                valid_intervals.append(interval)
+                break
+
+    return len(valid_intervals), valid_intervals
+
+def find_minimum_height(df, target_intervals, windows):
+    min_height = df['Ptot'].min()
+    max_height = df['Ptot'].max()
+    current_height = min_height
+
+    while current_height <= max_height:
+        count, intervals = count_intervals_above_line(df, current_height, windows)
+        if count == target_intervals:
+            return current_height, intervals
+        current_height += 1
+
+    return None, []
+
+def find_minimum_height(df, target_intervals, windows):
+    unique_heights = sorted(df['Ptot'].unique())
+    low, high = 0, len(unique_heights) - 1
+    result = None
+    valid_intervals = []
+
+    while low <= high:
+        mid = (low + high) // 2
+        height = unique_heights[mid]
+        count, intervals = count_intervals_above_line(df, height, windows)
+
+        if count in (target_intervals, target_intervals + 1) :
+            result = height
+            valid_intervals = intervals
+            high = mid - 1
+        elif count < target_intervals:
+            high = mid - 1
+        else:
+            low = mid + 1
+
+    return result, valid_intervals
+
+def find_minimum_height(df, target_intervals, windows):
+    min_height = df['Ptot'].min()
+    max_height = df['Ptot'].max()
+    height = min_height
+    result = None
+    valid_intervals = []
+
+    while height <= max_height:
+        count, intervals = count_intervals_above_line(df, height, windows)
+
+        if count in (target_intervals, target_intervals + 1):
+            result = height
+            if valid_intervals:
+                break
+            else:
+                valid_intervals = intervals
+                height += 10
+
+        height += 1
+
+    return result, valid_intervals
+
+def find_minimum_height(df, target_intervals, windows):
+    min_height = df['Ptot'].min()
+    max_height = df['Ptot'].max()
+    current_height = min_height
+    num_points = len(df)
+    threshold_points = num_points * 0.005
+
+    prevCurrent_height, prevIntervals = 0, []
+
+    while current_height <= max_height:
+        count, intervals = count_intervals_above_line(df, current_height, windows)
+        num_points_below = len(df[df['Ptot'] <= current_height])
+
+        if count > target_intervals * 2 + 1 or num_points_below > threshold_points:
+            return prevCurrent_height, prevIntervals
+        prevCurrent_height, prevIntervals = current_height, intervals
+        current_height += 1
+
+    return None, []
+
+
+def find_minimum_height(df, target_intervals, windows):
+    unique_heights = sorted(df['Ptot'].unique())
+    num_points = len(df)
+    threshold_points = num_points * 0.005
+    num_points_below = 0
+
+    prevCurrent_height, prevIntervals = 0, []
+    
+    for height in unique_heights:
+        count, intervals = count_intervals_above_line(df, height, windows)
+        if count > target_intervals * 2 + 1 or num_points_below > threshold_points:
+            return prevCurrent_height, prevIntervals
+        prevCurrent_height, prevIntervals = height, intervals
+        num_points_below += 1
+
+    return None, []
+
 def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file_PlateauExp = None, startCell_couverts = None, file = None, writeFileNames = False, to_update_excels = True, open_all = True, graph = True):
     global fichier_names
 
@@ -525,6 +656,8 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
     # Check if the graph folder exists, create it if not
     os.makedirs(dossier_graphique, exist_ok=True)
         
+    valid_intervals = []
+    
     # Traitement des fichiers
     for fileInd, fichier in enumerate(fichier_names):
         
@@ -908,7 +1041,26 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         recap_excel[fichier]["Duree_segm_inacivite_Sd"] = stats["sd"]
 
         if file_PlateauExp:
-            valid_intervals = find_minimum_height(df, len(processed_values[fileInd]), merged_windows)
+            min_height, valid_intervals = find_minimum_height(df, len(processed_values[fileInd]), merged_windows)
+
+            segments = []
+            labels = []
+            i = 0
+            j = 0
+            for startCouv, endCouv in valid_intervals:
+                merged_windowsI = merged_windows[i:]
+                for start, end in merged_windowsI:
+                    if df["time"].iloc[end] > endCouv:
+                        j += 1
+                        break
+                    segments.append(df['Ptot'][start:end+1].values)
+                    labels.append(couverts.index(processed_values[fileInd][j]))
+                    i+=1
+            
+            with open(r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\uzeir\interval_label.txt", 'a') as file:  # 'a' mode for appending
+                for segment, label in zip(segments, labels):
+                    segment_str = ','.join(map(str, segment))
+                    file.write(f'{segment_str};{label}\n')
 
         if not graph:
             continue
@@ -963,16 +1115,29 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                     bgcolor="white",
                     opacity=0.8,
                 )
+        for couvertInd, couvert in enumerate(valid_intervals):
+            if couvertInd:
+                fig.add_shape(
+                    type="rect",
+                    x0=df["time"].iloc[valid_intervals[couvertInd - 1]],
+                    y0=df["Ptot"].min(),
+                    x1=df["time"].iloc[couvert[0]],
+                    y1=df["Ptot"].max(),
+                    line=dict(color=color, width=2),
+                    fillcolor="green",
+                    opacity=0.2,
+                )
 
-        fig.add_trace(
-            Scatter(
-                y=significant_peaks_y,
-                x=significant_peaks_x,
-                mode="markers",
-                name="Pics détectés",
-                marker=dict(color="red", size=8),
-            )
-        )
+
+        # fig.add_trace(
+        #     Scatter(
+        #         y=significant_peaks_y,
+        #         x=significant_peaks_x,
+        #         mode="markers",
+        #         name="Pics détectés",
+        #         marker=dict(color="red", size=8),
+        #     )
+        # )
         fig.add_annotation(
             x=df["time"].iloc[-1],
             y=df["Ptot"].max(),
@@ -1061,7 +1226,61 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         # close_xlsm(excel, workbook, workbook_open, open_all)
 
     # def analyseAI():
-        
+
+
+
+def train_AI(filename=r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\uzeir\interval_label.txt"):
+    segments = []
+    labels = []
+    with open(filename, 'r') as file:
+        for line in file:
+            segment_str, label_str = line.strip().split(';')
+            segment = list(map(float, segment_str.split(',')))
+            label = int(label_str)
+            segments.append(segment)
+            labels.append(label)
+                    
+            
+    # Normalize segments
+    scaler = MinMaxScaler()
+
+    normalized_segments = [scaler.fit_transform(segment.reshape(-1, 1)).flatten() for segment in segments]
+
+    # Pad sequences to ensure equal length
+    padded_segments = pad_sequences(normalized_segments, padding='post', dtype='float32')
+
+    # Convert to numpy array and reshape for CNN
+    X = np.array(padded_segments)
+    y = np.array(labels)
+
+    X = X.reshape((X.shape[0], X.shape[1], 1))
+
+
+
+    # One-hot encode labels
+    y = to_categorical(y, num_classes=3)
+
+    # Build CNN model
+    model = Sequential()
+    model.add(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(X.shape[1], 1)))
+    model.add(MaxPooling1D(pool_size=2))
+    model.add(Flatten())
+    model.add(Dense(100, activation='relu'))
+    model.add(Dense(3, activation='softmax'))
+
+    # Compile the model
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+    # Train the model
+    model.fit(X, y, epochs=10, verbose=1)
+
+
+
+    # Evaluate the model on training data (use validation data in practice)
+    loss, accuracy = model.evaluate(X, y, verbose=0)
+    print(f'Accuracy: {accuracy*100:.2f}%')
+
+
 
 excel_all_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\Tableau récapitulatif - new algo"
 excel_segments_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\durée_segments"
@@ -1122,6 +1341,9 @@ startCell_couverts = "E4"
 
 
 # find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "180624_Dorian_Laura_P1.xlsx", writeFileNames = True)
-# find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Benjamin_Roxane_P1.xlsx", writeFileNames = True)
-find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, writeFileNames = True, graph = False)
+find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Benjamin_Roxane_P1.xlsx", writeFileNames = False, graph = False)
+# find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, writeFileNames = True, graph = False)
 # find_bites(dossier, dossier_graphique, date_folder, "14_05_Benjamin.xlsx")
+
+
+train_AI()
