@@ -26,6 +26,8 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense
 from tensorflow.keras.utils import to_categorical
 
+from enum import Enum, auto
+
 """"///////////////////Variables globales///////////////////"""
 poids_min = float("inf")
 debut_ind = 0
@@ -36,7 +38,10 @@ int_time = 0.2
 plate_weight_min = 100
 min_bite_duration = 1  # Minimum bite duration in seconds
 min_bite_weight = 2
+min_activity_weight = 2
+max_bite_weight = 20000
 min_inactivity = 1
+min_diff = 50  # Minimum difference in indices between consecutive peaks
 min_peak = 0
 min_plate_weight = 700
 noActivity_bgColor = 0xCDCDCC
@@ -530,6 +535,11 @@ def find_minimum_height(df, target_intervals, windows):
 
     return None, []
 
+class SegmentType(Enum):
+    BOUCHEE = auto()
+    ACTIVITEE_SANS_B = auto()
+    INACTIVITY = auto()
+
 def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file_PlateauExp = None, startCell_couverts = None, file = None, writeFileNames = False, to_update_excels = True, open_all = True, graph = True):
     global fichier_names
 
@@ -702,7 +712,7 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
             val_ini = filtered_df["Ptot"].iloc[i]
             j = i + 1
 
-            while j < len(filtered_df) and np.abs(filtered_df["Ptot"].iloc[j] - val_ini) < min_bite_weight:
+            while j < len(filtered_df) and np.abs(filtered_df["Ptot"].iloc[j] - val_ini) < min_activity_weight:
                 j += 1
 
             if j <= len(filtered_df):
@@ -762,8 +772,48 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         if len(valid_peaks) == 0:
             continue
 
-        # Filter closely spaced peaks and merge windows
-        min_diff = 50  # Minimum difference in indices between consecutive peaks
+
+        valid_intervals = []
+        if file_PlateauExp:
+            min_height, valid_intervals = find_minimum_height(df, len(processed_values[fileInd]), merged_windows)
+        if not valid_intervals:
+            valid_intervals = [(-1, -1)]
+        partInd = 0
+
+        merged_windows = []
+        segmType = []
+        poidsDiff = []
+        start_activity = None
+        end_activity = None
+        start_inactivity = None
+
+        # add a end point to df
+        df = df.append(df.iloc[-1], ignore_index=True)
+
+        for id, pt in enumerate(df):
+            # check if the two contiguous pt have the same Ptot
+            if pt["Ptot"] != pt["Ptot"].shift(1):
+                if not start_inactivity:
+                    start_inactivity = pt
+            elif start_inactivity:
+                if pt["time"] - start_inactivity["time"] >= min_inactivity:
+                    # add the dataframe interval to inters
+                    merged_windows.append((start_activity, end_activity))
+                    poidsDiff.append(end_activity["Ptot"] - start_activity["Ptot"])
+                    if poidsDiff[-1] < 0:
+                        segmType.append(SegmentType.BOUCHEE)
+                    else:
+                        segmType.append(SegmentType.ACTIVITEE_SANS_B)
+                    merged_windows.append((start_inactivity, pt))
+                    segmType.append(SegmentType.INACTIVITY)
+                if id == len(df):
+                    if start_inactivity:
+                        merged_windows.append((start_activity, end_activity))
+                        segmType.append(SegmentType.BOUCHEE)
+                start_inactivity = None
+                start_activity = pt
+
+
 
         i = valid_peaks[-1]
         while i + 1 < len(df):
@@ -772,6 +822,7 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                 valid_prominences = np.append(valid_prominences, 0)
             i+=1
         allPeaksFound = False
+        # Filter closely spaced peaks and merge windows
         while not allPeaksFound:
             stop_the_bite = True
             allPeaksFound = True
@@ -779,7 +830,7 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
             activity_time = 0
             final_peaks_indices = []
             merged_windows = []
-            is_bite = []
+            segmType = []
             associatedWith = []
             window_start, window_end = 0, 0
             Duree_activite_min = float("inf")
@@ -850,11 +901,11 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                             # check if the activity decreases the amount of food
                             diff = df["Ptot"].iloc[window_end] - df["Ptot"].iloc[window_start]
                             associatedWith.append(-1)
-                            if diff <= -min_bite_weight:
-                                for index, prev_diff in enumerate(is_bite):
+                            if diff <= -min_bite_weight and diff >= -max_bite_weight:
+                                for index, prev_diff in enumerate(segmType):
                                     if abs(prev_diff + diff) < prev_diff / 20 + 1:
                                         diff = 0
-                                        is_bite[index] = 0
+                                        segmType[index] = 0
                                         associatedWith[-1] = index
                                         break
                                 if diff:
@@ -903,7 +954,7 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                                     #         last_quantity = df["Ptot"].iloc[j]
                                     #     exploring_horizontal-=1
                                     #     in_peak = False
-                            is_bite.append(diff)
+                            segmType.append(diff)
                             firstPeakAfterPrevAct = i
                         add_peak_update_next = not lastI
                     else:
@@ -990,10 +1041,10 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
             segment_excel[fichier]["travail"].append(travail_bouchees[-1])
             force_max.append(interval["Ptot"].max() - df["Ptot"].iloc[window[0]])
             segment_excel[fichier]["Force Max"].append(force_max[-1])
-            segment_excel[fichier]["colors"].append(int(is_bite[index] <= -min_bite_weight))
+            segment_excel[fichier]["colors"].append(int(segmType[index] <= -min_bite_weight and diff >= -max_bite_weight))
             if segment_excel[fichier]["colors"][-1]:
-                segment_excel[fichier]["poids"].append(-is_bite[index])
-                poids_bouchees.append(-is_bite[index])
+                segment_excel[fichier]["poids"].append(-segmType[index])
+                poids_bouchees.append(-segmType[index])
                 duree_bouchees.append(segment_excel[fichier]["duree"][-1])
             else:
                 segment_excel[fichier]["poids"].append(0)
@@ -1008,6 +1059,8 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                     segment_excel[fichier]["Force Max"].append(0)
                     segment_excel[fichier]["colors"].append(2)
                     duree_inactivitee.append(diff)
+                    if diff < 0:
+                        print("didff")
                 
         stats = calculate_statistics(poids_bouchees)
         recap_excel[fichier]["Poids_Moyen"] = stats["mean"]
@@ -1041,7 +1094,6 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         recap_excel[fichier]["Duree_segm_inacivite_Sd"] = stats["sd"]
 
         if file_PlateauExp:
-            min_height, valid_intervals = find_minimum_height(df, len(processed_values[fileInd]), merged_windows)
 
             segments = []
             labels = []
@@ -1056,6 +1108,8 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                     segments.append(df['Ptot'][start:end+1].values)
                     labels.append(couverts.index(processed_values[fileInd][j]))
                     i+=1
+                if len(valid_intervals) - 1 in (len(processed_values[fileInd]), len(processed_values[fileInd]) * 2) and j == len(valid_intervals) - 1:
+                    break
             
             with open(r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\uzeir\interval_label.txt", 'a') as file:  # 'a' mode for appending
                 for segment, label in zip(segments, labels):
@@ -1089,7 +1143,7 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
             #     and df["Ptot"].iloc[end_idx + 1] < df["Ptot"].iloc[end_idx]
             # ):
             #     end_idx += 1
-            color = "Red" if is_bite[index] <= -min_bite_weight else "Gray"
+            color = "Red" if segmType[index] <= -min_bite_weight else "Gray"
             fig.add_shape(
                 type="rect",
                 x0=df["time"].iloc[start_idx],
@@ -1244,7 +1298,7 @@ def train_AI(filename=r"C:\Users\abarb\Documents\travail\stage et4\travail\codeP
     # Normalize segments
     scaler = MinMaxScaler()
 
-    normalized_segments = [scaler.fit_transform(segment.reshape(-1, 1)).flatten() for segment in segments]
+    normalized_segments = [scaler.fit_transform(np.array(segment).reshape(-1, 1)).flatten() for segment in segments]
 
     # Pad sequences to ensure equal length
     padded_segments = pad_sequences(normalized_segments, padding='post', dtype='float32')
@@ -1332,7 +1386,7 @@ dossier_recap = path + r"recap\recap.xlsm"
 dossier_recap_segments = path + r"recap\segments.xlsm"
 
 
-convert_csv_to_xlsx(path + "Expériences plateaux", dossier)
+# convert_csv_to_xlsx(path + "Expériences plateaux", dossier)
 
 file_PlateauExp = "Plateaux_Exp.xlsx"
 file_PlateauExp = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine(non corrompue)\A envoyer\Plateaux_Exp.xlsx"
@@ -1341,7 +1395,8 @@ startCell_couverts = "E4"
 
 
 # find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "180624_Dorian_Laura_P1.xlsx", writeFileNames = True)
-find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Benjamin_Roxane_P1.xlsx", writeFileNames = False, graph = False)
+find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Dorian_Laura_P2.xlsx", writeFileNames = False, graph = False)
+# find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Benjamin_Roxane_P1.xlsx", writeFileNames = False, graph = False)
 # find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, writeFileNames = True, graph = False)
 # find_bites(dossier, dossier_graphique, date_folder, "14_05_Benjamin.xlsx")
 
