@@ -22,12 +22,9 @@ Public Sub ImportSegments(row_found As Variant, tabs As Variant, data As Variant
     Dim xlEdgeRight As Long
     Dim borders As Variant
     Dim border As Variant
+    Dim segmentMax As Integer
 
-    Dim dataRow() As String
-    Dim dataSegments() As String
     Dim i As Integer, j As Integer, n As Integer
-    Dim dataRowData() As String
-    Dim dataSegmentsData() As String
     Dim cell As Range
     
     xlEdgeLeft = 7
@@ -44,21 +41,22 @@ Public Sub ImportSegments(row_found As Variant, tabs As Variant, data As Variant
     Dim wbs As Object
     Set wbs = CreateObject("Scripting.Dictionary")
     
-    MsgBox "hey"
     AddScriptingRuntimeReference
     Dim ws As Worksheet
     For Each ws In ThisWorkbook.Worksheets
-        wbs(ws.Name) = ws
+        wbs.Add ws.Name, ws
     Next ws
+
+    segmentMax = -1
     
-    For i = LBound(dataRow) To UBound(dataRow) - 1
+    For i = LBound(row_found) To UBound(row_found)
         n = CInt(row_found(i, 1))
-        For k = LBound(data(i)) To UBound(data(i))
+        For k = LBound(data, 2) To UBound(data, 2)
             If tabs(k) = "colors" Then
-                For m = LBound(data(i)) To UBound(data(i))
+                For m = LBound(data, 2) To UBound(data, 2)
                     If tabs(m) <> "colors" Then
                         For j = LBound(data(i, k)) To UBound(data(i, k))
-                            wbs(tabs(k)).Cells(n, j + 1).Interior.Color = data(i, k, j)
+                            wbs(tabs(m)).Cells(n, j + 1).Interior.Color = data(i, k)(j)
                         Next j
                     End If
                 Next m
@@ -66,7 +64,7 @@ Public Sub ImportSegments(row_found As Variant, tabs As Variant, data As Variant
                 wbs(tabs(k)).Cells(1, 1).Value = "Repas"
                 wbs(tabs(k)).Cells(n, 1).Value = row_found(i, 0)
                 For j = LBound(data(i, k)) To UBound(data(i, k))
-                    wbs(tabs(k)).Cells(n, j + 1).Value = data(i, k, j)
+                    wbs(tabs(k)).Cells(n, j + 1).Value = data(i, k)(j)
                 Next j
             End If
             
@@ -85,22 +83,39 @@ Public Sub ImportSegments(row_found As Variant, tabs As Variant, data As Variant
             '     End If
             ' Next j
         Next k
+        If UBound(data(i, 0)) > segmentMax Then
+            segmentMax = UBound(data(i, 0))
+        End If
     Next i
     If segmentMax > -1 Then
-        For i = segmentMax + 1 To 1 Step -1
-            Set cell = ws.Cells(1, i + 1)
-            If cell.Value = "Segment " & i Then
-                Exit For
-            Else
-                cell.Value = "Segment " & i
-            End If
-        Next i
+        ' For i = segmentMax + 1 To 1 Step -1
+        '     Set cell = wbs(tabs(0)).Cells(1, i + 1)
+        '     If cell.Value = "Segment " & i Then
+        '         Exit For
+        '     Else
+        '         cell.Value = "Segment " & i
+        '     End If
+        ' Next i
+
+        Dim headers() As String
+        ' Initialize the headers array
+        ReDim headers(1 To segmentMax + 1)
+        ' Generate headers dynamically
+        For j = 1 To segmentMax + 1
+            headers(j) = "Segment " & j
+        Next j
+        For k = LBound(data, 2) To UBound(data, 2)
+            wbs(tabs(k)).Range(wbs(tabs(k)).Cells(1, 2), wbs(tabs(k)).Cells(1, segmentMax + 1)).Value = headers
+        Next k
     End If
 End Sub
 
 Sub test()
     ImportSegments "Feuil1", "hey:3;yo2:6", "4.5:16711935:5.5:16711935;5.5:16711935"
 End Sub
+
+
+
 
 
 
