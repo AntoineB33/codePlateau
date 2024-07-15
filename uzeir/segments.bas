@@ -56,7 +56,7 @@ Public Sub ImportSegments(row_found As Variant, tabs As Variant, data As Variant
                 For m = LBound(data, 2) To UBound(data, 2)
                     If tabs(m) <> "colors" Then
                         For j = LBound(data(i, k)) To UBound(data(i, k))
-                            wbs(tabs(m)).Cells(n, j + 1).Interior.Color = data(i, k)(j)
+                            wbs(tabs(m)).Cells(n, j + 2).Interior.Color = data(i, k)(j)
                         Next j
                     End If
                 Next m
@@ -64,7 +64,7 @@ Public Sub ImportSegments(row_found As Variant, tabs As Variant, data As Variant
                 wbs(tabs(k)).Cells(1, 1).Value = "Repas"
                 wbs(tabs(k)).Cells(n, 1).Value = row_found(i, 0)
                 For j = LBound(data(i, k)) To UBound(data(i, k))
-                    wbs(tabs(k)).Cells(n, j + 1).Value = data(i, k)(j)
+                    wbs(tabs(k)).Cells(n, j + 2).Value = data(i, k)(j)
                 Next j
             End If
             

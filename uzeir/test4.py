@@ -28,6 +28,9 @@ from tensorflow.keras.utils import to_categorical
 
 from enum import Enum, auto
 
+import ast
+import json
+
 """"///////////////////Variables globales///////////////////"""
 poids_min = float("inf")
 debut_ind = 0
@@ -126,6 +129,23 @@ class Segment:
             self.type = SegmentType.INACTIVITY
         self.associated = False
 
+
+# Function to read the dictionary from a txt file
+def read_dict_from_txt(file_path):
+    if not os.path.exists(file_path):
+        return {}
+    
+    with open(file_path, 'r') as file:
+        content = file.read()
+        if content:
+            return ast.literal_eval(content)
+        else:
+            return {}
+
+# Function to write the dictionary to a txt file
+def write_dict_to_txt(file_path, dictionary):
+    with open(file_path, 'w') as file:
+        file.write(json.dumps(dictionary))
 
 def convert_csv_to_xlsx(folder_path, xlsx_folder_path=""):
     # List all files in the given folder
@@ -273,7 +293,7 @@ def open_xlsm(full_file_path, module_name, *sheet_names):
 
     ensure_sheets_exist(workbook, *sheet_names)
         
-    if sheet_names and 0:
+    if sheet_names:
         # Update the VBA module with the code from the .bas file
         bas_file_path = "uzeir\\" + full_file_path.split("\\")[-1].replace('.xlsm', '.bas')
         update_vba_module_from_bas(workbook, module_name, bas_file_path)
@@ -567,6 +587,7 @@ def addActBOrWithoutB(poidsDiff, segmType, start_activity, end_activity):
 
 def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file_PlateauExp = None, startCell_couverts = None, file = None, writeFileNames = False, to_update_excels = True, open_all = True, graph = True):
     global fichier_names
+    updates = dict()
 
     processed_values = []
     if file_PlateauExp:
@@ -824,168 +845,6 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
 
 
 
-        """i = valid_peaks[-1]
-        while i + 1 < len(df):
-            if df["Ptot"].iloc[i] != df["Ptot"].iloc[i + 1]:
-                valid_peaks = np.append(valid_peaks, i + 1)
-                valid_prominences = np.append(valid_prominences, 0)
-            i+=1
-        allPeaksFound = False
-        # Filter closely spaced peaks and merge windows
-        while not allPeaksFound:
-            stop_the_bite = True
-            allPeaksFound = True
-            add_peak_update_next = True
-            activity_time = 0
-            final_peaks_indices = []
-            merged_windows = []
-            segmType = []
-            associatedWith = []
-            window_start, window_end = 0, 0
-            Duree_activite_min = float("inf")
-            Duree_activite_max = 0
-            bouchees = 0
-            i = 0
-            while i <= len(valid_peaks):
-                if final_peaks_indices:
-                    lastI = i == len(valid_peaks)
-                    if stop_the_bite:
-                        # increase the window to the left
-                        exploring_horizontal = 5
-                        for j in range(window_start, 0, -1):
-                            if df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]:
-                                exploring_horizontal -= 1
-                                if exploring_horizontal == 0:
-                                    break
-                            else:
-                                exploring_horizontal = 5
-                                window_start = j - 1
-                    upTo = len(df) - 1 if lastI else valid_peaks[i]
-                    stop_the_bite = lastI or (upTo - final_peaks_indices[-1]) > min_diff
-                    if stop_the_bite:
-                        # increase the window to the right
-                        exploring_horizontal = 5
-                        for j in range(window_end, upTo):
-                            if df["Ptot"].iloc[j] == df["Ptot"].iloc[j + 1]:
-                                exploring_horizontal -= 1
-                                if exploring_horizontal == 0:
-                                    break
-                            else:
-                                exploring_horizontal = 5
-                                window_end = j + 1
-                        stop_the_bite = lastI or (upTo - window_end) > min_diff
-                    if not stop_the_bite:
-                        # cut into two bites if a long period of inactivity is found in the bite window
-                        last_activity = window_end
-                        for window_endi in range(window_end, upTo):
-                            if (
-                                df["Ptot"].iloc[window_endi]
-                                != df["Ptot"].iloc[window_endi + 1]
-                            ):
-                                if (
-                                    df["time"].iloc[window_endi]
-                                    - df["time"].iloc[last_activity]
-                                    > min_inactivity
-                                ):
-                                    stop_the_bite = True
-                                    window_end = last_activity
-                                    break
-                                last_activity = window_endi + 1
-                    if stop_the_bite:
-                        if window_start == 0 and df0["time"].iloc[0]!=df["time"].iloc[0]:
-                            del final_peaks_indices[0]
-                        else:
-                            if window_end == len(df)-1 and df0["time"].iloc[len(df0) - 1]!=df["time"].iloc[len(df)-1]:
-                                del final_peaks_indices[-1]
-                                break
-                            merged_windows.append((window_start, window_end))
-                            Duree_activity = (
-                                df["time"].iloc[window_end] - df["time"].iloc[window_start]
-                            )
-                            activity_time += Duree_activity
-                            if Duree_activite_min > Duree_activity:
-                                Duree_activite_min = Duree_activity
-                            if Duree_activite_max < Duree_activity:
-                                Duree_activite_max = Duree_activity
-                            # check if the activity decreases the amount of food
-                            diff = df["Ptot"].iloc[window_end] - df["Ptot"].iloc[window_start]
-                            associatedWith.append(-1)
-                            if diff <= -min_bite_weight and diff >= -max_bite_weight:
-                                for index, prev_diff in enumerate(segmType):
-                                    if abs(prev_diff + diff) < prev_diff / 20 + 1:
-                                        diff = 0
-                                        segmType[index] = 0
-                                        associatedWith[-1] = index
-                                        break
-                                if diff:
-                                    bouchees += 1
-                                    fin_ind = len(merged_windows)
-                            # check if the food quantity has decreased before this bite
-                            if (
-                                len(merged_windows) > 1
-                                and df["Ptot"].iloc[window_start]
-                                != df["Ptot"].iloc[merged_windows[-2][1]]
-                                and 10):
-                                # go back to see where would be the missing bite
-                                # last_quantity = df["Ptot"].iloc[merged_windows[-2][1]]
-                                in_peak = False
-                                for j in range(merged_windows[-2][1] + 1, window_start):
-                                    # if df["time"].iloc[j]>=390.95:
-                                    #     print(5)
-                                    if j>0 and df["Ptot"].iloc[j] != df["Ptot"].iloc[j - 1]:
-                                        # if j == 719 or j == 722 or j == 723 or j == 725:
-                                        #     print(7)
-                                        valid_peaks = np.insert(valid_peaks, firstPeakAfterPrevAct, j)
-                                        firstPeakAfterPrevAct += 1
-                                        valid_prominences = np.insert(
-                                            valid_prominences, i - 1, 0
-                                        )
-                                        allPeaksFound = False
-                                        i += 1
-                                    # if df["Ptot"].iloc[j] > last_quantity + min_peak:
-                                    #     valid_peaks = np.insert(valid_peaks, i - 1, j)
-                                    #     valid_prominences = np.insert(
-                                    #         valid_prominences, i - 1, 0
-                                    #     )
-                                    #     allPeaksFound = False
-                                    #     i += 1
-                                    #     in_peak = True
-                                    #     exploring_horizontal = 5
-                                    # elif (
-                                    #     not in_peak
-                                    #     and df["Ptot"].iloc[j] < last_quantity
-                                    #     and j > 0
-                                    #     and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]
-                                    # ):
-                                    #     last_quantity = df["Ptot"].iloc[j]
-                                    # elif j>0 and df["Ptot"].iloc[j] == df["Ptot"].iloc[j - 1]:
-                                    #     if exploring_horizontal == 0:
-                                    #         last_quantity = df["Ptot"].iloc[j]
-                                    #     exploring_horizontal-=1
-                                    #     in_peak = False
-                            segmType.append(diff)
-                            firstPeakAfterPrevAct = i
-                        add_peak_update_next = not lastI
-                    else:
-                        # Merge peaks if they are close
-                        window_end = valid_peaks[i]
-                        if (
-                            valid_prominences[i]
-                            > valid_prominences[
-                                np.where(valid_peaks == final_peaks_indices[-1])[0][0]
-                            ]
-                        ):
-                            final_peaks_indices[-1] = valid_peaks[i]
-                if add_peak_update_next:
-                    final_peaks_indices.append(valid_peaks[i])
-                    window_start = valid_peaks[i]
-                    window_end = valid_peaks[i]
-                    add_peak_update_next = False
-                i += 1"""
-
-
-
-
         valid_intervals = []
         min_height, valid_intervals = find_minimum_height(df, len(processed_values[fileInd]), merged_windows)
         if not valid_intervals:
@@ -1125,14 +984,11 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                 if segment.start["time"] == valid_intervals[j][0]:
                     j += 1
                     continue
-                segments.append(df['Ptot'][segment.startId:segment.endId + 1].values)
+                segments.append(df.iloc[segment.startId:segment.endId + 1])
                 labels.append(couverts.index(processed_values[fileInd][j]))
+            updates[fichier] = [segment, labels]
             
-            with open(r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\uzeir\interval_label.txt", 'a') as file:  # 'a' mode for appending
-                for segment, label in zip(segments, labels):
-                    segment_str = ','.join(map(str, segment))
-                    file.write(f'{segment_str};{label}\n')
-
+            
         if not graph:
             continue
 
@@ -1246,6 +1102,21 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         # Save to CSV
         features_df.to_csv("bite_features.csv", index=False)
 
+
+
+    # Path to the txt file
+    file_path = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\uzeir\interval_label.txt"
+
+    # Read the existing dictionary from the txt file
+    existing_dict = read_dict_from_txt(file_path)
+
+    # Update the existing dictionary with the 'updates' variable
+    existing_dict.update(updates)
+
+    # Write the updated dictionary back to the txt file
+    write_dict_to_txt(file_path, existing_dict)
+
+    
     if to_update_excels:
         # new_fichier_names = []
         # for fileInd, fichier in enumerate(fichier_names):
