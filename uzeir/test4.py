@@ -103,6 +103,26 @@ couverts = [
 """/////////////////////////////////////////////////////////"""
 
 
+class SegmentType(Enum):
+    BOUCHEE = auto()
+    ACTIVITEE_SANS_B = auto()
+    INACTIVITY = auto()
+
+class Segment:
+    def __init__(self, start, end, is_activity = True):
+        self.start = start
+        self.end = end
+        self.weight = 0
+        if is_activity:
+            self.weight = end["Ptot"] - start["Ptot"]
+            if self.weight < -min_bite_weight:
+                self.type = SegmentType.BOUCHEE
+            else:
+                self.type = SegmentType.ACTIVITEE_SANS_B
+        else:
+            self.type = SegmentType.INACTIVITY
+
+
 def convert_csv_to_xlsx(folder_path, xlsx_folder_path=""):
     # List all files in the given folder
     files = [file for file in os.listdir("C:\\Users\\abarb\\Documents\\travail\\stage et4\\travail\\codePlateau\\data\\A envoyer_antoine(non corrompue)\\A envoyer\\Expériences plateaux") if file.endswith(".csv") or file.endswith(".CSV")]
@@ -431,10 +451,8 @@ def count_intervals_above_line(df, height, windows):
 
     valid_intervals = []
     for interval in intervals:
-        interval_start_index = df[df['time'] == interval[0]].index[0]
-        interval_end_index = df[df['time'] == interval[1]].index[0]
         for window in windows:
-            if interval_start_index <= window[1] and interval_end_index >= window[0]:
+            if interval[0] <= window.end["time"] and interval[1] >= window.start["time"]:
                 valid_intervals.append(interval)
                 break
 
@@ -535,14 +553,17 @@ def find_minimum_height(df, target_intervals, windows):
 
     return None, []
 
-class SegmentType(Enum):
-    BOUCHEE = auto()
-    ACTIVITEE_SANS_B = auto()
-    INACTIVITY = auto()
+def addActBOrWithoutB(poidsDiff, segmType, start_activity, end_activity):
+    poidsDiff.append(end_activity["Ptot"] - start_activity["Ptot"])
+    if poidsDiff[-1] < 0:
+        segmType.append(SegmentType.BOUCHEE)
+    else:
+        segmType.append(SegmentType.ACTIVITEE_SANS_B)
 
 def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file_PlateauExp = None, startCell_couverts = None, file = None, writeFileNames = False, to_update_excels = True, open_all = True, graph = True):
     global fichier_names
 
+    processed_values = []
     if file_PlateauExp:
         # Open the workbook
         excel, workbook, workbook_open = open_xlsm(file_PlateauExp, module_name)
@@ -570,7 +591,6 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
 
         
         # Process the values
-        processed_values = []
         for row, value in enumerate(values):
             # Split the value by "-" or "+"
             parts = re.split(r'[-+]', value)
@@ -666,7 +686,6 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
     # Check if the graph folder exists, create it if not
     os.makedirs(dossier_graphique, exist_ok=True)
         
-    valid_intervals = []
     
     # Traitement des fichiers
     for fileInd, fichier in enumerate(fichier_names):
@@ -726,7 +745,7 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         peaks_x = []
         peaks_y = []
 
-        # Peak detection
+        """# Peak detection
         peaks, _ = find_peaks(
             df["Ptot"], height=100, distance=1
         )  # Reduced distance for more sensitivity
@@ -770,52 +789,42 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         valid_prominences = peak_prominences(df["Ptot"], valid_peaks)[0]
 
         if len(valid_peaks) == 0:
-            continue
+            continue"""
 
 
-        valid_intervals = []
-        if file_PlateauExp:
-            min_height, valid_intervals = find_minimum_height(df, len(processed_values[fileInd]), merged_windows)
-        if not valid_intervals:
-            valid_intervals = [(-1, -1)]
-        partInd = 0
 
         merged_windows = []
         segmType = []
         poidsDiff = []
-        start_activity = None
-        end_activity = None
+        start_activity = df.iloc[0]
         start_inactivity = None
 
-        # add a end point to df
-        df = df.append(df.iloc[-1], ignore_index=True)
-
-        for id, pt in enumerate(df):
+        for id, pt in df.iterrows():
             # check if the two contiguous pt have the same Ptot
-            if pt["Ptot"] != pt["Ptot"].shift(1):
-                if not start_inactivity:
-                    start_inactivity = pt
-            elif start_inactivity:
-                if pt["time"] - start_inactivity["time"] >= min_inactivity:
-                    # add the dataframe interval to inters
-                    merged_windows.append((start_activity, end_activity))
-                    poidsDiff.append(end_activity["Ptot"] - start_activity["Ptot"])
-                    if poidsDiff[-1] < 0:
-                        segmType.append(SegmentType.BOUCHEE)
+            if id == len(df) - 1:
+                if start_inactivity is not None:
+                    if pt["time"] - start_inactivity["time"] >= min_inactivity:
+                        # add the dataframe interval to inters
+                        merged_windows.append(Segment(start_activity, start_inactivity))
+                        merged_windows.append(Segment(start_inactivity, pt, False))
                     else:
-                        segmType.append(SegmentType.ACTIVITEE_SANS_B)
-                    merged_windows.append((start_inactivity, pt))
-                    segmType.append(SegmentType.INACTIVITY)
-                if id == len(df):
-                    if start_inactivity:
-                        merged_windows.append((start_activity, end_activity))
-                        segmType.append(SegmentType.BOUCHEE)
-                start_inactivity = None
-                start_activity = pt
+                        merged_windows.append(Segment(start_activity, pt))
+                else:
+                    merged_windows.append(Segment(start_activity, pt))
+            elif pt["Ptot"] != df.iloc[id + 1]["Ptot"]:
+                if start_inactivity is not None:
+                    if pt["time"] - start_inactivity["time"] >= min_inactivity:
+                        # add the dataframe interval to inters
+                        merged_windows.append(Segment(start_activity, start_inactivity))
+                        merged_windows.append(Segment(start_inactivity, pt, False))
+                        start_activity = pt
+                    start_inactivity = None
+            elif start_inactivity is None:
+                start_inactivity = pt
 
 
 
-        i = valid_peaks[-1]
+        """i = valid_peaks[-1]
         while i + 1 < len(df):
             if df["Ptot"].iloc[i] != df["Ptot"].iloc[i + 1]:
                 valid_peaks = np.append(valid_peaks, i + 1)
@@ -972,54 +981,46 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                     window_start = valid_peaks[i]
                     window_end = valid_peaks[i]
                     add_peak_update_next = False
-                i += 1
+                i += 1"""
 
 
-        # Calcul du temps d'activité
-        # if len(significant_peaks_x) > 0:
-        #     activity_start_time = significant_peaks_x[0]
-        #     activity_end_time = significant_peaks_x[-1]
-        #     activity_time = math.trunc(activity_end_time - activity_start_time)
-        # else:
-        #     activity_time = 0
 
 
-        if bouchees:
-            # debut_ind = 0
-            # while -min_bite_weight < is_bite[debut_ind]:
-            #     debut_ind += 1
-            # merged_windows = merged_windows[debut_ind:fin_ind]
-            # final_peaks_indices = final_peaks_indices[debut_ind:fin_ind]
-            # is_bite = is_bite[debut_ind:fin_ind]
+        valid_intervals = []
+        min_height, valid_intervals = find_minimum_height(df, len(processed_values[fileInd]), merged_windows)
 
-            debut_time = merged_windows[0][0]
-            fin_time = merged_windows[-1][1]
-            poids_consome = df["Ptot"].iloc[debut_time] - df["Ptot"].iloc[fin_time]
-            temps_repas = df["time"].iloc[fin_time] - df["time"].iloc[debut_time]
-        else:
-            poids_consome = 0
-            temps_repas = 0
-        significant_peaks_x = df["time"].iloc[final_peaks_indices].values
-        significant_peaks_y = df["Ptot"].iloc[final_peaks_indices].values
-        ratio = activity_time / temps_repas if temps_repas > 0 else 0
+        # remove windows touching the parts between intervals
+        windInd = 0
+        for id in range(-1, len(valid_intervals) - 1):
+            if id == -1:
+                start_interval = 0
+            else:
+                start_interval = valid_intervals[id][1]
+            while merged_windows[windInd].end["time"] < start_interval:
+                windInd += 1
+            if merged_windows[windInd].start["time"] <= valid_intervals[id + 1][0]:
+                if windInd:
+                    if windInd < len(merged_windows) - 1:
+                        merged_windows[windInd - 1].end = merged_windows[windInd + 1].end
+                        del merged_windows[windInd + 1]
+                    else:
+                        merged_windows[windInd - 1].end = merged_windows[windInd].end
+                    del merged_windows[windInd]
+                elif len(merged_windows) > 1:
+                    merged_windows[0].end = merged_windows[1].end
+                    del merged_windows[1]
+                else:
+                    merged_windows = []
+        
 
-        print(f"Le poids consommé pendant le repas est : {poids_consome}")
-        print(f"La durée du repas est : {convert_time(temps_repas)}")
-        print(f"Le temps d'activité est : {convert_time(activity_time)}")
-        print(f"Le ratio d'activité est : {ratio}")
-        print(f"Le nombre de bouchée pendant le repas est : {bouchees}")
+        # Find an activity that changes the weigth as much as a precedent activity change it in the opposite way, make the two of them 'activities without bite', and add it in associatedWith
+        associatedWith = []
+        for segment in merged_windows:
+            if segment.type == SegmentType.BOUCHEE:
+                for prec_segment in merged_windows:
+                    if segment.type == SegmentType.ACTIVITEE_SANS_B and abs(segment.weight + prec_segment.weight) < prec_segment.weight / 20 + 1:
+                        associatedWith.append([segment, prec_segment])
 
-        # for couvert in processed_values[fileInd]:
-        #     fichier += "_" + couvert
-        recap_excel[fichier] = dict()
-        recap_excel[fichier]["Bouchees"] = bouchees
-        recap_excel[fichier]["Proportion_activite"] = round(ratio * 100, 1)
-        recap_excel[fichier]["Duree_activite_min"] = Duree_activite_min
-        recap_excel[fichier]["Duree_activite_max"] = Duree_activite_max
-        recap_excel[fichier]["Duree_activite_mean"] = round(activity_time / bouchees, 3)
-        recap_excel[fichier]["Duree_activite_Totale"] = activity_time
-        recap_excel[fichier]["Action"] = len(merged_windows)
-        recap_excel[fichier]["Poids_Conso"] = poids_consome
 
         
         segment_excel[fichier] = dict()
@@ -1034,12 +1035,12 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         duree_activitee_sans_b = []
         duree_inactivitee = []
         for index, window in enumerate(merged_windows):
-            segment_excel[fichier]["duree"].append(df["time"].iloc[window[1]] - df["time"].iloc[window[0]])
-            segment_excel[fichier]["ecart de temps"].append(df["time"].iloc[window[1]] - df["time"].iloc[window[0]])
-            interval = df.iloc[window[0]:window[1]+1]
+            segment_excel[fichier]["duree"].append(window.end["time"] - window.start["time"])
+            segment_excel[fichier]["ecart de temps"].append(window.end["time"] - window.start["time"])
+            interval = df.iloc[window.start:window.end]
             travail_bouchees.append(calculate_work(interval))
             segment_excel[fichier]["travail"].append(travail_bouchees[-1])
-            force_max.append(interval["Ptot"].max() - df["Ptot"].iloc[window[0]])
+            force_max.append(interval["Ptot"].max() - window.start["Ptot"])
             segment_excel[fichier]["Force Max"].append(force_max[-1])
             segment_excel[fichier]["colors"].append(int(segmType[index] <= -min_bite_weight and diff >= -max_bite_weight))
             if segment_excel[fichier]["colors"][-1]:
@@ -1050,7 +1051,7 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                 segment_excel[fichier]["poids"].append(0)
                 duree_activitee_sans_b.append(segment_excel[fichier]["duree"][-1])
             if index + 1 < len(merged_windows):
-                diff = df["time"].iloc[merged_windows[index + 1][0]] - df["time"].iloc[window[1]]
+                diff = merged_windows[index + 1].start["time"] - window.end["time"]
                 if diff:
                     segment_excel[fichier]["duree"].append(diff)
                     segment_excel[fichier]["poids"].append(0)
@@ -1062,6 +1063,40 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                     if diff < 0:
                         print("didff")
                 
+
+        duree_activitee = duree_bouchees + duree_activitee_sans_b
+        stats = calculate_statistics(duree_activitee)
+        activity_time = sum(duree_activitee)
+
+        if poids_bouchees:
+            debut_time = merged_windows[0].start
+            fin_time = merged_windows[-1].end
+            poids_consome = debut_time["Ptot"] - fin_time["Ptot"]
+            temps_repas = fin_time["time"] - debut_time["time"]
+        else:
+            poids_consome = 0
+            temps_repas = 0
+        ratio = activity_time / temps_repas if temps_repas > 0 else 0
+
+        print(f"Le poids consommé pendant le repas est : {poids_consome}")
+        print(f"La durée du repas est : {convert_time(temps_repas)}")
+        print(f"Le temps d'activité est : {convert_time(activity_time)}")
+        print(f"Le ratio d'activité est : {ratio}")
+        print(f"Le nombre de bouchée pendant le repas est : {len(poids_bouchees)}")
+
+        # for couvert in processed_values[fileInd]:
+        #     fichier += "_" + couvert
+        recap_excel[fichier] = dict()
+        recap_excel[fichier]["Bouchees"] = len(poids_bouchees)
+        recap_excel[fichier]["Proportion_activite"] = round(ratio * 100, 1)
+        recap_excel[fichier]["Duree_activite_min"] = stats.min
+        recap_excel[fichier]["Duree_activite_max"] = stats.max
+        recap_excel[fichier]["Duree_activite_mean"] = round(stats.mean, 3)
+        recap_excel[fichier]["Duree_activite_Totale"] = activity_time
+        recap_excel[fichier]["Action"] = len(merged_windows)
+        recap_excel[fichier]["Poids_Conso"] = poids_consome
+
+
         stats = calculate_statistics(poids_bouchees)
         recap_excel[fichier]["Poids_Moyen"] = stats["mean"]
         recap_excel[fichier]["Poids_Min"] = stats["min"]
@@ -1101,11 +1136,11 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
             j = 0
             for startCouv, endCouv in valid_intervals:
                 merged_windowsI = merged_windows[i:]
-                for start, end in merged_windowsI:
-                    if df["time"].iloc[end] > endCouv:
+                for segment in merged_windowsI:
+                    if segment.end["time"] > endCouv:
                         j += 1
                         break
-                    segments.append(df['Ptot'][start:end+1].values)
+                    segments.append(df['Ptot'][segment.start:segment.end+1].values)
                     labels.append(couverts.index(processed_values[fileInd][j]))
                     i+=1
                 if len(valid_intervals) - 1 in (len(processed_values[fileInd]), len(processed_values[fileInd]) * 2) and j == len(valid_intervals) - 1:
@@ -1154,21 +1189,21 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                 fillcolor=color,
                 opacity=0.2,
             )
-            if associatedWith[index] != -1:
-                decalageVert = 200
-                yPos = df["Ptot"].iloc[start_idx:end_idx].max() + decalageVert
-                if yPos > df["Ptot"].max():
-                    yPos = df["Ptot"].iloc[start_idx:end_idx].min() - decalageVert
-                # Add the text annotation
-                fig.add_annotation(
-                    x=df["time"].iloc[(start_idx + end_idx) // 2],
-                    y=yPos,
-                    text=f"associated with action<br>starting at {df['time'].iloc[merged_windows[associatedWith[index]][0]]}",
-                    showarrow=False,
-                    font=dict(color="black", size=12),
-                    bgcolor="white",
-                    opacity=0.8,
-                )
+        for association in associatedWith:
+            decalageVertic = 200
+            yPos = df["Ptot"].iloc[start_idx:end_idx].max() + decalageVertic
+            if yPos > df["Ptot"].max():
+                yPos = df["Ptot"].iloc[start_idx:end_idx].min() - decalageVertic
+            # Add the text annotation
+            fig.add_annotation(
+                x=(association[0].start["time"] + association[0].end["time"]) // 2,
+                y=yPos,
+                text=f"associated with action<br>starting at {association[1].start["time"]}",
+                showarrow=False,
+                font=dict(color="black", size=12),
+                bgcolor="white",
+                opacity=0.8,
+            )
         for couvertInd, couvert in enumerate(valid_intervals):
             if couvertInd:
                 fig.add_shape(
@@ -1395,7 +1430,7 @@ startCell_couverts = "E4"
 
 
 # find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "180624_Dorian_Laura_P1.xlsx", writeFileNames = True)
-find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Dorian_Laura_P2.xlsx", writeFileNames = False, graph = False)
+find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Dorian_Laura_P2.xlsx", writeFileNames = False)
 # find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Benjamin_Roxane_P1.xlsx", writeFileNames = False, graph = False)
 # find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, writeFileNames = True, graph = False)
 # find_bites(dossier, dossier_graphique, date_folder, "14_05_Benjamin.xlsx")
