@@ -151,7 +151,7 @@ def convert_csv_to_xlsx(folder_path, xlsx_folder_path=""):
     # List all files in the given folder
     files = [file for file in os.listdir("C:\\Users\\abarb\\Documents\\travail\\stage et4\\travail\\codePlateau\\data\\A envoyer_antoine(non corrompue)\\A envoyer\\Expériences plateaux") if file.endswith(".csv") or file.endswith(".CSV")]
     folder_path == "C:\\Users\\abarb\\Documents\\travail\\stage et4\\travail\\codePlateau\\data\\A envoyer_antoine(non corrompue)\\A envoyer\\Expériences plateaux"
-    files = [file for file in os.listdir(folder_path) if file.endswith(".csv") or file.endswith(".CSV")]
+    files = [file for file in os.listdir(folder_path) if (file.endswith(".csv") or file.endswith(".CSV"))]
 
     # Process each file
     for file in files:
@@ -585,8 +585,60 @@ def addActBOrWithoutB(poidsDiff, segmType, start_activity, end_activity):
     else:
         segmType.append(SegmentType.ACTIVITEE_SANS_B)
 
-def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file_PlateauExp = None, startCell_couverts = None, file = None, writeFileNames = False, to_update_excels = True, open_all = True, graph = True):
+def update_excels():
+    fichier_names_rows = [name + date_folder for name in fichier_names]
+
+
+    fills = [str(rgb_to_bgr(color)) for color in [activityWithBite_bgColor, activityWithoutBite_bgColor, noActivity_bgColor]]
+
+        
+    data_lst = []
+    data_lst_segments = []
+    for fileInd, fichier in enumerate(fichier_names_rows):
+        if fichier_names[fileInd] in recap_excel:
+            data_lst.append([fichier])
+            data_lst_segments.append([])
+            # loop throught the keys of new_excel
+            for key in recap_titles:
+                data_lst[-1].append(str(recap_excel[fichier_names[fileInd]][key]))
+            for key in segm_titles:
+                data_lst_segments[-1].append([])
+                for window in segment_excel[fichier_names[fileInd]][key]:
+                    if key == "colors":
+                        data_lst_segments[-1][-1].append(fills[window])
+                    else:
+                        data_lst_segments[-1][-1].append(str(round(window, 1)))
+                    # data_lst_segments[-1][-1].append("")
+                # data_lst_segments[-1].append([])
+    
+    excel, workbook, workbook_open = open_xlsm(xlsm_recap, module_name, recap_sheet_name)
+    if writeFileNames:
+        excel.Application.Run(f'{workbook.Name}!allFileName', recap_sheet_name, fichier_names_rows)
+    row_found = excel.Application.Run(f'{workbook.Name}!SearchAndImportData', recap_sheet_name, "A", recap_titles, data_lst)
+    close_xlsm(excel, workbook, workbook_open, open_all)
+    excel, workbook, workbook_open = open_xlsm(xlsm_recap_segments, module_name, *segm_titles)
+    if row_found:
+        data_lst_segments.append([])
+        for key in segm_titles:
+            data_lst_segments[-1].append([])
+        excel.Application.Run(f'{workbook.Name}!ImportSegments', row_found, segm_titles, data_lst_segments)
+    else:
+        print(f"File name {fichier} not found in the main excel.")
+    close_xlsm(excel, workbook, workbook_open, open_all)
+
+def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file_PlateauExp = None, startCell_couverts = None, startCell_ = None, file = None, writeFileNames = False, to_update_excels = True, open_all = True, graph = True):
     global fichier_names
+
+
+    fichiers = []
+    for f in os.listdir(dossier):
+        if f.endswith(".xlsx") and (not file or f == file):
+            fichiers.append(os.path.join(dossier, f))
+
+    fichier_names = []
+    for fichier in fichiers:
+        fichier_names.append(os.path.basename(fichier).split(".")[0])
+
     updates = dict()
 
     processed_values = []
@@ -597,6 +649,7 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         sheet = workbook.Sheets(1)
         # start_range = sheet.Range(startCell_couverts)
         values = []
+        names_assoc = []
         # current_cell = start_range
 
 
@@ -604,13 +657,37 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
 
         # Read cells from the start cell downwards until an empty cell is encountered
         row_number = sheet.Range(startCell_couverts).Row
+        row_numberI = row_number
         column_number = sheet.Range(startCell_couverts).Column
         while True:
             cell_value = sheet.Cells(row_number, column_number).Value
             if cell_value is None:
                 break
             values.append(cell_value)
-            row_number += 1
+            row_numberI += 1
+            
+        # search for the first empty cell from startCell_couverts to the left
+        while True:
+            column_number += 1
+            cell_value = sheet.Cells(row_number, column_number).Value
+            if cell_value is None:
+                break
+        
+        # get the list of names associated with the list of cultery
+        row_numberI = row_number
+        while True:
+            cell_value = sheet.Cells(row_numberI, column_number).Value
+            if cell_value is None:
+                break
+            names_assoc.append(cell_value)
+            row_numberI += 1
+
+        # if names_assoc is empty then write the names of fichier_names in Excel
+        if not names_assoc:
+            names_assoc = fichier_names
+            for i, name in enumerate(fichier_names):
+                sheet.Cells(row_number + i, column_number).Value = name
+
         
         # Close the workbook
         close_xlsm(excel, workbook, workbook_open, open_all)
@@ -632,10 +709,6 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
 
 
 
-    fichiers = []
-    for f in os.listdir(dossier):
-        if f.endswith(".xlsx") and (not file or f == file):
-            fichiers.append(os.path.join(dossier, f))
 
 
     # Tableau_Final = pd.DataFrame(
@@ -705,9 +778,6 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
 
         return features
     
-    fichier_names = []
-    for fichier in fichiers:
-        fichier_names.append(os.path.basename(fichier).split(".")[0])
 
     # Check if the graph folder exists, create it if not
     os.makedirs(dossier_graphique, exist_ok=True)
@@ -771,57 +841,11 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         peaks_x = []
         peaks_y = []
 
-        """# Peak detection
-        peaks, _ = find_peaks(
-            df["Ptot"], height=100, distance=1
-        )  # Reduced distance for more sensitivity
-        prominences = peak_prominences(df["Ptot"], peaks)[0]
-
-        # Filter peaks based on prominence
-        poids_seuil = 10  # Lowered threshold for more sensitivity
-        significant_peaks_indices = np.where(prominences > poids_seuil)[0]
-        significant_peaks = peaks[significant_peaks_indices]
-        significant_prominences = prominences[significant_peaks_indices]
-
-        # Further filter peaks to ensure sufficient weight difference
-        weight_diff_threshold = 2  # Lowered threshold for more sensitivity
-        valid_peaks_indices = []
-        for idx in significant_peaks:
-            if (
-                (idx - 1 >= 0 and idx + 1 < len(df))
-                and (
-                    df["Ptot"].iloc[idx] - df["Ptot"].iloc[idx - 1] > weight_diff_threshold
-                )
-                and (
-                    df["Ptot"].iloc[idx] - df["Ptot"].iloc[idx + 1] > weight_diff_threshold
-                )
-            ):
-                # Check if weight changes significantly before and after the peak
-                window = 5  # Define a window around the peak to check weight change
-                if (
-                    (idx - window >= 0 and idx + window < len(df))
-                    and (
-                        abs(df["Ptot"].iloc[idx - window] - df["Ptot"].iloc[idx])
-                        > weight_diff_threshold
-                    )
-                    and (
-                        abs(df["Ptot"].iloc[idx + window] - df["Ptot"].iloc[idx])
-                        > weight_diff_threshold
-                    )
-                ):
-                    valid_peaks_indices.append(idx)
-
-        valid_peaks = np.array(valid_peaks_indices)
-        valid_prominences = peak_prominences(df["Ptot"], valid_peaks)[0]
-
-        if len(valid_peaks) == 0:
-            continue"""
-
 
 
         merged_windows = []
         poidsDiff = []
-        start_activity = 0
+        start_activity = -1
         start_inactivity = -1
 
         for id, pt in df.iterrows():
@@ -830,13 +854,15 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                 if start_inactivity != -1:
                     if pt["time"] - df["time"].iloc[start_inactivity] >= min_inactivity:
                         # add the dataframe interval to inters
-                        merged_windows.append(Segment(df, start_activity, start_inactivity))
+                        if start_activity != -1:
+                            merged_windows.append(Segment(df, start_activity, start_inactivity))
                         merged_windows.append(Segment(df, start_inactivity, id, False))
             elif pt["Ptot"] != df["Ptot"].iloc[id + 1]:
                 if start_inactivity != -1:
                     if pt["time"] - df["time"].iloc[start_inactivity] >= min_inactivity:
                         # add the dataframe interval to inters
-                        merged_windows.append(Segment(df, start_activity, start_inactivity))
+                        if start_activity != -1:
+                            merged_windows.append(Segment(df, start_activity, start_inactivity))
                         merged_windows.append(Segment(df, start_inactivity, id, False))
                         start_activity = id
                     start_inactivity = -1
@@ -844,11 +870,13 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                 start_inactivity = id
 
 
-
+        
         valid_intervals = []
-        min_height, valid_intervals = find_minimum_height(df, len(processed_values[fileInd]), merged_windows)
-        if not valid_intervals:
-            continue
+        if fichier in names_assoc:
+            cutlery_plan_id = names_assoc.find(fichier)
+            min_height, valid_intervals = find_minimum_height(df, len(processed_values[cutlery_plan_id]), merged_windows)
+            if not valid_intervals:
+                continue
 
         # remove windows touching the parts between intervals
         windInd = 0
@@ -977,16 +1005,24 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
 
         if file_PlateauExp:
 
+            # Populate segments and labels for the AI
             segments = []
             labels = []
             j = 0
+            label = couverts.index(processed_values[cutlery_plan_id][j])
             for segment in merged_windows:
-                if segment.start["time"] == valid_intervals[j][0]:
+                if segment.type == SegmentType.ENLEVEMENT_DU_PLATEAU:
                     j += 1
+                    if len(valid_intervals) in (len(processed_values[cutlery_plan_id]), len(processed_values[cutlery_plan_id]) + 1):
+                        if j == len(processed_values[cutlery_plan_id]):
+                            break
+                    elif len(valid_intervals) in (len(processed_values[cutlery_plan_id]) * 2, len(processed_values[cutlery_plan_id]) * 2 + 1) and j == len(processed_values[cutlery_plan_id]) * 2:
+                        break
+                    label = couverts.index(processed_values[cutlery_plan_id][j % len(processed_values[cutlery_plan_id])])
                     continue
-                segments.append(df.iloc[segment.startId:segment.endId + 1])
-                labels.append(couverts.index(processed_values[fileInd][j]))
-            updates[fichier] = [segment, labels]
+                segments.append(df["Ptot"].iloc[segment.startId:segment.endId + 1].values.tolist())
+                labels.append(label)
+            updates[fichier] = [segments, labels]
             
             
         if not graph:
@@ -1118,66 +1154,28 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
 
     
     if to_update_excels:
-        # new_fichier_names = []
-        # for fileInd, fichier in enumerate(fichier_names):
-        #     for couvert in processed_values[fileInd]:
-        #         new_fichier_names.append(fichier + "_" + couvert)
-        # fichier_names = new_fichier_names
-        fichier_names_rows = [name + date_folder for name in fichier_names]
-
-
-        fills = [str(rgb_to_bgr(color)) for color in [activityWithBite_bgColor, activityWithoutBite_bgColor, noActivity_bgColor]]
-
-            
-        data_lst = []
-        data_lst_segments = []
-        for fileInd, fichier in enumerate(fichier_names_rows):
-            if fichier_names[fileInd] in recap_excel:
-                data_lst.append([fichier])
-                data_lst_segments.append([])
-                # loop throught the keys of new_excel
-                for key in recap_titles:
-                    data_lst[-1].append(str(recap_excel[fichier_names[fileInd]][key]))
-                for key in segm_titles:
-                    data_lst_segments[-1].append([])
-                    for window in segment_excel[fichier_names[fileInd]][key]:
-                        if key == "colors":
-                            data_lst_segments[-1][-1].append(fills[window])
-                        else:
-                            data_lst_segments[-1][-1].append(str(round(window, 1)))
-                        # data_lst_segments[-1][-1].append("")
-                    # data_lst_segments[-1].append([])
-        
-        excel, workbook, workbook_open = open_xlsm(xlsm_recap, module_name, recap_sheet_name)
-        if writeFileNames:
-            excel.Application.Run(f'{workbook.Name}!allFileName', recap_sheet_name, fichier_names_rows)
-        row_found = excel.Application.Run(f'{workbook.Name}!SearchAndImportData', recap_sheet_name, "A", recap_titles, data_lst)
-        close_xlsm(excel, workbook, workbook_open, open_all)
-        excel, workbook, workbook_open = open_xlsm(xlsm_recap_segments, module_name, *segm_titles)
-        if row_found:
-            data_lst_segments.append([])
-            for key in segm_titles:
-                data_lst_segments[-1].append([])
-            excel.Application.Run(f'{workbook.Name}!ImportSegments', row_found, segm_titles, data_lst_segments)
-        else:
-            print(f"File name {fichier} not found in the main excel.")
-        close_xlsm(excel, workbook, workbook_open, open_all)
 
     # def analyseAI():
 
 
 
 def train_AI(filename=r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\uzeir\interval_label.txt"):
+    existing_dict = read_dict_from_txt(filename)
     segments = []
     labels = []
-    with open(filename, 'r') as file:
-        for line in file:
-            segment_str, label_str = line.strip().split(';')
-            segment = list(map(float, segment_str.split(',')))
-            label = int(label_str)
-            segments.append(segment)
-            labels.append(label)
+    for fichier in existing_dict:
+        segments += existing_dict[fichier][0]
+        labels += existing_dict[fichier][1]
                     
+                    
+    # Ensure labels are a continuous sequence
+    unique_labels = sorted(set(labels))
+    label_mapping = {label: idx for idx, label in enumerate(unique_labels)}
+    labels = [label_mapping[label] for label in labels]
+
+    # Adjust class names to match new labels
+    adjusted_class_names = [couverts[unique_labels[i]] for i in range(len(unique_labels))]
+
             
     # Normalize segments
     scaler = MinMaxScaler()
@@ -1196,7 +1194,7 @@ def train_AI(filename=r"C:\Users\abarb\Documents\travail\stage et4\travail\codeP
 
 
     # One-hot encode labels
-    y = to_categorical(y, num_classes=max(labels))
+    y = to_categorical(y, num_classes=len(adjusted_class_names))
 
     # Build CNN model
     model = Sequential()
@@ -1261,6 +1259,7 @@ date_folder = "_28_05_24"
 
 # path = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer(pate a modeler)\A envoyer"
 path = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\A envoyer_antoine(non corrompue)\A envoyer"
+# path = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\data\Données Plateau 12 Juillet"
 date_folder = ""
 
 path += "\\"
@@ -1280,9 +1279,8 @@ startCell_couverts = "E4"
 
 # find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "180624_Dorian_Laura_P1.xlsx", writeFileNames = True)
 # find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Dorian_Laura_P2.xlsx", writeFileNames = False)
-find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Benjamin_Roxane_P1.xlsx", writeFileNames = False)
-# find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, writeFileNames = True, graph = False)
-# find_bites(dossier, dossier_graphique, date_folder, "14_05_Benjamin.xlsx")
+# find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Benjamin_Roxane_P1.xlsx", writeFileNames = False)
+find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_names, writeFileNames = True)
 
 
 # train_AI()
