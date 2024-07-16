@@ -585,13 +585,18 @@ def addActBOrWithoutB(poidsDiff, segmType, start_activity, end_activity):
     else:
         segmType.append(SegmentType.ACTIVITEE_SANS_B)
 
-def update_excels():
-    fichier_names_rows = [name + date_folder for name in fichier_names]
+def update_excels(fichier_names_rows, updates, data_AI_path, xlsm_recap, xlsm_recap_segments, writeFileNames, open_all, fichier_names_rows_fst_column = None):
+    if not fichier_names_rows_fst_column:
+        fichier_names_rows_fst_column = fichier_names_rows
+    # Read the existing dictionary from the txt file
+    existing_dict = read_dict_from_txt(data_AI_path)
 
+    # Update the existing dictionary with the 'updates' variable
+    existing_dict.update(updates)
 
-    fills = [str(rgb_to_bgr(color)) for color in [activityWithBite_bgColor, activityWithoutBite_bgColor, noActivity_bgColor]]
+    # Write the updated dictionary back to the txt file
+    write_dict_to_txt(data_AI_path, existing_dict)
 
-        
     data_lst = []
     data_lst_segments = []
     for fileInd, fichier in enumerate(fichier_names_rows):
@@ -613,7 +618,7 @@ def update_excels():
     
     excel, workbook, workbook_open = open_xlsm(xlsm_recap, module_name, recap_sheet_name)
     if writeFileNames:
-        excel.Application.Run(f'{workbook.Name}!allFileName', recap_sheet_name, fichier_names_rows)
+        excel.Application.Run(f'{workbook.Name}!allFileName', recap_sheet_name, fichier_names_rows_fst_column)
     row_found = excel.Application.Run(f'{workbook.Name}!SearchAndImportData', recap_sheet_name, "A", recap_titles, data_lst)
     close_xlsm(excel, workbook, workbook_open, open_all)
     excel, workbook, workbook_open = open_xlsm(xlsm_recap_segments, module_name, *segm_titles)
@@ -626,7 +631,7 @@ def update_excels():
         print(f"File name {fichier} not found in the main excel.")
     close_xlsm(excel, workbook, workbook_open, open_all)
 
-def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file_PlateauExp = None, startCell_couverts = None, startCell_ = None, file = None, writeFileNames = False, to_update_excels = True, open_all = True, graph = True):
+def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_segments, file_PlateauExp = None, data_AI_path = None, startCell_couverts = None, startCell_ = None, file = None, writeFileNames = False, to_update_excels_seq = True, to_update_excels_end = False, open_all = True, graph = True):
     global fichier_names
 
 
@@ -639,9 +644,15 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
     for fichier in fichiers:
         fichier_names.append(os.path.basename(fichier).split(".")[0])
 
+    
+    # for updating Excels
+    fichier_names_rows = [name + date_folder for name in fichier_names]
+
+
     updates = dict()
 
     processed_values = []
+    names_assoc = []
     if file_PlateauExp:
         # Open the workbook
         excel, workbook, workbook_open = open_xlsm(file_PlateauExp, module_name)
@@ -649,7 +660,6 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         sheet = workbook.Sheets(1)
         # start_range = sheet.Range(startCell_couverts)
         values = []
-        names_assoc = []
         # current_cell = start_range
 
 
@@ -657,30 +667,28 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
 
         # Read cells from the start cell downwards until an empty cell is encountered
         row_number = sheet.Range(startCell_couverts).Row
-        row_numberI = row_number
+        j = 0
         column_number = sheet.Range(startCell_couverts).Column
         while True:
-            cell_value = sheet.Cells(row_number, column_number).Value
+            cell_value = sheet.Cells(row_number + j, column_number).Value
             if cell_value is None:
                 break
             values.append(cell_value)
-            row_numberI += 1
+            j += 1
             
-        # search for the first empty cell from startCell_couverts to the left
+        # search for the first empty cell from startCell_couverts to the right
         while True:
             column_number += 1
-            cell_value = sheet.Cells(row_number, column_number).Value
+            cell_value = sheet.Cells(row_number + 1, column_number).Value
             if cell_value is None:
                 break
         
         # get the list of names associated with the list of cultery
-        row_numberI = row_number
-        while True:
-            cell_value = sheet.Cells(row_numberI, column_number).Value
+        for i in range(j):
+            cell_value = sheet.Cells(row_number + i, column_number).Value
             if cell_value is None:
                 break
             names_assoc.append(cell_value)
-            row_numberI += 1
 
         # if names_assoc is empty then write the names of fichier_names in Excel
         if not names_assoc:
@@ -727,8 +735,6 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
     # )
 
     print(dossier)
-    recap_excel = dict()
-    segment_excel = dict()
 
 
     # Fonction pour convertir le temps en minutes et secondes
@@ -873,7 +879,7 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         
         valid_intervals = []
         if fichier in names_assoc:
-            cutlery_plan_id = names_assoc.find(fichier)
+            cutlery_plan_id = names_assoc.index(fichier)
             min_height, valid_intervals = find_minimum_height(df, len(processed_values[cutlery_plan_id]), merged_windows)
             if not valid_intervals:
                 continue
@@ -1023,6 +1029,9 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
                 segments.append(df["Ptot"].iloc[segment.startId:segment.endId + 1].values.tolist())
                 labels.append(label)
             updates[fichier] = [segments, labels]
+
+        if to_update_excels_seq:
+            update_excels([fichier], updates, data_AI_path, xlsm_recap, xlsm_recap_segments, writeFileNames, open_all, fichier_names_rows)
             
             
         if not graph:
@@ -1139,23 +1148,8 @@ def find_bites(dossier, dossier_graphique, date_folder, xlsm_recap, xlsm_recap_s
         features_df.to_csv("bite_features.csv", index=False)
 
 
-
-    # Path to the txt file
-    file_path = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\uzeir\interval_label.txt"
-
-    # Read the existing dictionary from the txt file
-    existing_dict = read_dict_from_txt(file_path)
-
-    # Update the existing dictionary with the 'updates' variable
-    existing_dict.update(updates)
-
-    # Write the updated dictionary back to the txt file
-    write_dict_to_txt(file_path, existing_dict)
-
-    
-    if to_update_excels:
-
-    # def analyseAI():
+    if to_update_excels_end:
+        update_excels(fichier_names_rows, updates, data_AI_path, xlsm_recap, xlsm_recap_segments, writeFileNames, open_all)
 
 
 
@@ -1218,6 +1212,17 @@ def train_AI(filename=r"C:\Users\abarb\Documents\travail\stage et4\travail\codeP
 
 
 
+fichier_names_rows = []
+fills = [str(rgb_to_bgr(color)) for color in [activityWithBite_bgColor, activityWithoutBite_bgColor, noActivity_bgColor]]
+recap_excel = dict()
+segment_excel = dict()
+
+
+
+
+
+
+
 excel_all_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\Tableau récapitulatif - new algo"
 excel_segments_path = r".\data\Resultats exp bag_couverts\Resultats exp bag_couverts\durée_segments"
 
@@ -1277,10 +1282,13 @@ startCell_couverts = "F4"
 startCell_couverts = "E4"
 
 
+data_AI_path = r"C:\Users\abarb\Documents\travail\stage et4\travail\codePlateau\uzeir\interval_label.txt"
+
+
 # find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "180624_Dorian_Laura_P1.xlsx", writeFileNames = True)
 # find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Dorian_Laura_P2.xlsx", writeFileNames = False)
 # find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_couverts, file = "18_06_24_Benjamin_Roxane_P1.xlsx", writeFileNames = False)
-find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, startCell_names, writeFileNames = True)
+find_bites(dossier, dossier_graphique, date_folder, dossier_recap, dossier_recap_segments, file_PlateauExp, data_AI_path, startCell_couverts, writeFileNames = True)
 
 
 # train_AI()
